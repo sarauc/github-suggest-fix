@@ -1,7 +1,13 @@
 """
-Milestone 1 — GitHub Action MVP
-Reads a pull_request_review_comment event, fetches code context,
-calls Claude, and posts a GitHub suggestion block as a reply.
+Milestone 1 — GitHub Action MVP (author-triggered flow)
+
+New UX:
+  1. Reviewer leaves an inline review comment describing an issue.
+  2. PR author replies to that comment with /suggest-fix.
+  3. This script fetches the reviewer's ORIGINAL comment (path, line, body),
+     calls Claude, and posts a suggestion block back into the same thread.
+
+The feature now serves the PR author on demand, not the reviewer.
 """
 
 import base64
@@ -16,10 +22,8 @@ import requests
 # ---------------------------------------------------------------------------
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-COMMENT_BODY = os.environ["COMMENT_BODY"]
-COMMENT_ID = int(os.environ["COMMENT_ID"])
-FILE_PATH = os.environ["FILE_PATH"]
-LINE = int(os.environ["LINE"])
+REPLY_COMMENT_ID = int(os.environ["REPLY_COMMENT_ID"])   # the /suggest-fix reply
+PARENT_COMMENT_ID = int(os.environ["PARENT_COMMENT_ID"]) # reviewer's root comment
 PR_NUMBER = int(os.environ["PR_NUMBER"])
 REPO = os.environ["REPO"]
 
@@ -35,6 +39,17 @@ CONTEXT_WINDOW = 20  # lines above and below the commented line
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def fetch_parent_comment() -> dict:
+    """
+    Fetch the reviewer's original (root) comment by ID.
+    Returns the full comment object which includes body, path, and line.
+    """
+    url = f"https://api.github.com/repos/{REPO}/pulls/comments/{PARENT_COMMENT_ID}"
+    resp = requests.get(url, headers=GITHUB_HEADERS, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
 
 def fetch_file_context(file_path: str, target_line: int) -> tuple[str, int]:
     """
@@ -72,7 +87,7 @@ def detect_language(file_path: str) -> str:
     return ext_map.get(ext, "")
 
 
-def generate_suggestion(comment: str, code_context: str, file_path: str, target_line: int) -> str:
+def generate_suggestion(review_comment: str, code_context: str, file_path: str, target_line: int) -> str:
     language = detect_language(file_path)
     lang_hint = f" ({language})" if language else ""
 
@@ -80,7 +95,7 @@ def generate_suggestion(comment: str, code_context: str, file_path: str, target_
 
 A reviewer left the following comment on a pull request:
 ---
-{comment}
+{review_comment}
 ---
 
 File: {file_path}{lang_hint}
@@ -112,12 +127,12 @@ Respond in this exact format:
     return message.content[0].text
 
 
-def post_reply(comment_id: int, body: str) -> None:
+def post_reply(in_reply_to: int, body: str) -> None:
     url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/comments"
     resp = requests.post(
         url,
         headers=GITHUB_HEADERS,
-        json={"body": body, "in_reply_to": comment_id},
+        json={"body": body, "in_reply_to": in_reply_to},
         timeout=15,
     )
     if not resp.ok:
@@ -130,21 +145,34 @@ def post_reply(comment_id: int, body: str) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    print(f"Processing comment {COMMENT_ID} on {REPO} PR#{PR_NUMBER}")
-    print(f"  File: {FILE_PATH}, line: {LINE}")
+    print(f"Fetching reviewer's comment {PARENT_COMMENT_ID} ...")
+    parent = fetch_parent_comment()
 
-    code_context, offset = fetch_file_context(FILE_PATH, LINE)
-    print(f"  Fetched {CONTEXT_WINDOW*2} lines of context (target offset: {offset})")
+    review_comment_body = parent.get("body", "")
+    file_path = parent.get("path")
+    # `line` is the new-file line; fall back to `original_line` for unchanged lines
+    line = parent.get("line") or parent.get("original_line")
 
-    suggestion_text = generate_suggestion(COMMENT_BODY, code_context, FILE_PATH, LINE)
+    if not file_path or not line:
+        print("Skipping: parent comment has no file path or line number (e.g. top-level PR comment).")
+        sys.exit(0)
+
+    print(f"  Reviewer comment on {file_path}:{line}")
+    print(f"  Reviewer said: {review_comment_body[:120]!r}{'...' if len(review_comment_body) > 120 else ''}")
+
+    code_context, _offset = fetch_file_context(file_path, line)
+    print(f"  Fetched ±{CONTEXT_WINDOW} lines of context.")
+
+    suggestion_text = generate_suggestion(review_comment_body, code_context, file_path, line)
     print("  Claude response received.")
 
     reply_body = (
         "🤖 **AI Suggested Fix** *(auto-generated — please review before applying)*\n\n"
         + suggestion_text
     )
-    post_reply(COMMENT_ID, reply_body)
-    print("  Reply posted successfully.")
+    # Reply to the reviewer's root comment so the suggestion sits in the right thread
+    post_reply(PARENT_COMMENT_ID, reply_body)
+    print("  Suggestion posted successfully.")
 
 
 if __name__ == "__main__":
