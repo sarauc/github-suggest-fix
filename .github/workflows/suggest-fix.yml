@@ -1,0 +1,39 @@
+name: AI Suggest Fix
+
+on:
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  suggest-fix:
+    runs-on: ubuntu-latest
+    # Only run when the comment body contains /suggest-fix
+    if: contains(github.event.comment.body, '/suggest-fix')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install anthropic requests
+
+      - name: Run suggest-fix script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          FILE_PATH: ${{ github.event.comment.path }}
+          # `line` is the right-side (new file) line number for the comment
+          LINE: ${{ github.event.comment.line }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: python scripts/suggest_fix.py
