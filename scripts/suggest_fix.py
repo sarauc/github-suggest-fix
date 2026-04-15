@@ -19,7 +19,11 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 COMMENT_BODY = os.environ["COMMENT_BODY"]
 COMMENT_ID = int(os.environ["COMMENT_ID"])
 FILE_PATH = os.environ["FILE_PATH"]
-LINE = int(os.environ["LINE"])
+
+# add a guard against an edge case where LINE is None
+_line_raw = os.environ.get("LINE", "")
+LINE = int(_line_raw) if _line_raw and _line_raw != "null" else None
+
 PR_NUMBER = int(os.environ["PR_NUMBER"])
 REPO = os.environ["REPO"]
 
@@ -130,6 +134,10 @@ def post_reply(comment_id: int, body: str) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    if LINE is None:
+        print("Skipping: comment has no line number (multi-line diff comment).")
+        sys.exit(0)
+
     print(f"Processing comment {COMMENT_ID} on {REPO} PR#{PR_NUMBER}")
     print(f"  File: {FILE_PATH}, line: {LINE}")
 
