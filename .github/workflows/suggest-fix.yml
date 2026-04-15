@@ -10,8 +10,11 @@ permissions:
 jobs:
   suggest-fix:
     runs-on: ubuntu-latest
-    # Only run when the comment body contains /suggest-fix
-    if: contains(github.event.comment.body, '/suggest-fix')
+    # Trigger when the PR author (or anyone) replies to a review comment with /suggest-fix.
+    # in_reply_to_id being non-empty means this is a reply, not a root review comment.
+    if: |
+      github.event.comment.in_reply_to_id != '' &&
+      contains(github.event.comment.body, '/suggest-fix')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,11 +32,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
-          COMMENT_ID: ${{ github.event.comment.id }}
-          FILE_PATH: ${{ github.event.comment.path }}
-          # `line` is the right-side (new file) line number for the comment
-          LINE: ${{ github.event.comment.line }}
+          # ID of the /suggest-fix reply (used to avoid re-triggering on our own posts)
+          REPLY_COMMENT_ID: ${{ github.event.comment.id }}
+          # ID of the reviewer's original root comment — contains path, line, and body
+          PARENT_COMMENT_ID: ${{ github.event.comment.in_reply_to_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: python scripts/suggest_fix.py
