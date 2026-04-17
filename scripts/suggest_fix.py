@@ -91,7 +91,7 @@ def generate_suggestion(review_comment: str, code_context: str, file_path: str, 
     language = detect_language(file_path)
     lang_hint = f" ({language})" if language else ""
 
-    prompt = f"""You are an expert code reviewer assistant helping developers fix issues identified in pull request reviews.
+    prompt = f"""You are an expert code reviewer assistant helping PR authors understand and act on reviewer feedback.
 
 A reviewer left the following comment on a pull request:
 ---
@@ -104,19 +104,22 @@ Code context (line numbers shown, target is line {target_line}):
 {code_context}
 ```
 
-Instructions:
-- Understand what the reviewer is asking to fix.
-- Generate a minimal, correct fix — only change what is strictly necessary.
-- Output ONLY a suggestion block containing the replacement line(s) for line {target_line}.
-- Do NOT include unchanged surrounding lines in the suggestion block.
-- After the suggestion block add exactly one sentence explaining what changed.
-- If the comment is ambiguous or you cannot determine a safe fix, say so explicitly instead of guessing.
+Your response must have three parts in this exact order:
 
-Respond in this exact format:
+**1. Reviewer's perspective**
+In 2-3 sentences, explain what the reviewer is concerned about and *why* it matters — the underlying principle, risk, or convention they are pointing to. Write this for the PR author so they genuinely understand the feedback, not just the surface request.
+
+**2. Suggested fix**
+A minimal, correct code change — only alter what is strictly necessary. Use a GitHub suggestion block so the author can apply it in one click. Do NOT include unchanged surrounding lines inside the block.
+
 ```suggestion
-<replacement line(s) here>
+<replacement line(s) for line {target_line} only>
 ```
-<one-sentence explanation>"""
+
+**3. One-line rationale**
+A single sentence explaining what the fix does differently and why that resolves the reviewer's concern.
+
+If the comment is too ambiguous to produce a safe fix, skip parts 2 and 3 and explain why in part 1."""
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     message = client.messages.create(
