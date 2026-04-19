@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UI/UX Exploration — Get Help from AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+    }
+
+    /* ─── Header ─────────────────────────────────────────── */
+    .page-header {
+      padding: 32px 48px 16px;
+      border-bottom: 1px solid #21262d;
+    }
+    .page-header h1 { font-size: 22px; font-weight: 600; color: #f0f6fc; }
+    .page-header p  { margin-top: 6px; font-size: 14px; color: #8b949e; }
+
+    /* ─── Tab Nav ─────────────────────────────────────────── */
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      padding: 0 48px;
+      border-bottom: 1px solid #21262d;
+      background: #0d1117;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .tab-btn {
+      padding: 14px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #8b949e;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: #e6edf3; }
+    .tab-btn.active {
+      color: #f0f6fc;
+      border-bottom-color: #f78166;
+    }
+    .tab-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .badge-a { background: #1f4e79; color: #79c0ff; }
+    .badge-b { background: #3d1c6e; color: #d2a8ff; }
+    .badge-c { background: #1c3a1c; color: #56d364; }
+
+    /* ─── Panel ───────────────────────────────────────────── */
+    .tab-panel { display: none; padding: 40px 48px; }
+    .tab-panel.active { display: block; }
+
+    .option-title {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .option-title h2 { font-size: 20px; font-weight: 600; color: #f0f6fc; }
+    .option-title .tagline { font-size: 13px; color: #8b949e; font-style: italic; }
+
+    .design-concept {
+      font-size: 13px;
+      color: #8b949e;
+      margin-bottom: 28px;
+      line-height: 1.6;
+      max-width: 720px;
+    }
+    .design-concept strong { color: #c9d1d9; }
+
+    /* ─── Layout: icon view + panel view side-by-side ─────── */
+    .views {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .view-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #484f58;
+      margin-bottom: 12px;
+    }
+
+    /* ──────────────────────────────────────────────────────── */
+    /*  OPTION A — GitHub-Native Minimal                       */
+    /* ──────────────────────────────────────────────────────── */
+
+    /* Comment mock */
+    .gh-comment {
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #161b22;
+    }
+    .gh-comment-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+    }
+    .gh-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .gh-avatar-blue { background: #1f4e79; color: #79c0ff; }
+    .gh-avatar-purple { background: #3d1c6e; color: #d2a8ff; }
+    .gh-avatar-green { background: #1c3a1c; color: #56d364; }
+
+    .gh-username { font-size: 13px; font-weight: 600; color: #c9d1d9; }
+    .gh-timestamp { font-size: 12px; color: #484f58; margin-left: auto; }
+
+    .gh-comment-body {
+      padding: 12px 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #c9d1d9;
+    }
+
+    /* Option A: inline action bar */
+    .gh-comment-actions-a {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-top: 1px solid #21262d;
+    }
+    .gh-reaction-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      border: 1px solid #30363d;
+      background: none;
+      color: #8b949e;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .gh-reply-btn {
+      margin-left: auto;
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: none;
+      color: #8b949e;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* The "Get Help" trigger — Option A style */
+    .help-btn-a {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: none;
+      color: #8b949e;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .help-btn-a:hover {
+      border-color: #58a6ff;
+      color: #58a6ff;
+      background: rgba(88, 166, 255, 0.05);
+    }
+    .help-btn-a svg { opacity: 0.7; }
+
+    /* Option A Panel */
+    .panel-a {
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #161b22;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .panel-a-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #30363d;
+      background: #1c2128;
+    }
+    .panel-a-title { font-size: 13px; font-weight: 600; color: #c9d1d9; }
+    .panel-a-close {
+      margin-left: auto;
+      background: none; border: none;
+      color: #484f58; cursor: pointer; font-size: 16px;
+      line-height: 1;
+    }
+    .panel-a-body { padding: 16px; }
+
+    .context-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 1px solid #30363d;
+      font-size: 11px;
+      color: #8b949e;
+      margin-bottom: 12px;
+    }
+
+    .ai-message-a {
+      font-size: 13px;
+      line-height: 1.65;
+      color: #c9d1d9;
+    }
+    .ai-message-a .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #58a6ff;
+      margin: 14px 0 6px;
+    }
+    .approach-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .approach-item {
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .approach-name {
+      font-weight: 600;
+      font-size: 12px;
+      color: #e6edf3;
+      margin-bottom: 4px;
+    }
+    .approach-meta {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+    }
+    .pro  { color: #3fb950; }
+    .con  { color: #f85149; }
+
+    .panel-a-input {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid #30363d;
+      background: #1c2128;
+    }
+    .panel-a-input input {
+      flex: 1;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #c9d1d9;
+      outline: none;
+    }
+    .panel-a-send {
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* ──────────────────────────────────────────────────────── */
+    /*  OPTION B — Bold AI-First Dark Panel                    */
+    /* ──────────────────────────────────────────────────────── */
+
+    .gh-comment-actions-b {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      border-top: 1px solid #21262d;
+    }
+
+    .help-btn-b {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: none;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.4), 0 2px 8px rgba(124, 58, 237, 0.3);
+      letter-spacing: 0.01em;
+    }
+    .help-btn-b .sparkle { font-size: 14px; }
+
+    /* Option B Panel */
+    .panel-b {
+      border-radius: 12px;
+      background: #13111c;
+      border: 1px solid #2d2640;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .panel-b-header {
+      background: linear-gradient(135deg, #1e1333 0%, #16112b 100%);
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #2d2640;
+    }
+    .ai-orb {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+    }
+    .panel-b-title { font-size: 14px; font-weight: 700; color: #f0f0ff; }
+    .panel-b-sub { font-size: 11px; color: #6e6a8a; margin-top: 1px; }
+    .panel-b-close {
+      margin-left: auto;
+      background: none; border: none;
+      color: #4a4560; cursor: pointer; font-size: 18px;
+    }
+
+    .panel-b-body { padding: 18px; }
+
+    .ai-bubble-b {
+      background: linear-gradient(135deg, #1e1333, #1a1628);
+      border: 1px solid #2d2640;
+      border-radius: 12px 12px 12px 4px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #c8c4e0;
+      line-height: 1.65;
+      margin-bottom: 14px;
+    }
+    .ai-bubble-b .understanding {
+      color: #a78bfa;
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .approach-card-b {
+      border-radius: 8px;
+      border: 1px solid #2d2640;
+      background: #1a1628;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+    }
+    .approach-card-b-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #e2dff5;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .approach-num {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      font-size: 10px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .tags-b { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .tag-pro-b {
+      padding: 2px 8px; border-radius: 20px;
+      background: rgba(63, 185, 80, 0.1);
+      border: 1px solid rgba(63, 185, 80, 0.25);
+      color: #3fb950; font-size: 10px; font-weight: 600;
+    }
+    .tag-con-b {
+      padding: 2px 8px; border-radius: 20px;
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid rgba(248, 81, 73, 0.25);
+      color: #f85149; font-size: 10px; font-weight: 600;
+    }
+
+    .panel-b-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 12px 18px;
+      border-top: 1px solid #2d2640;
+      background: #13111c;
+      align-items: center;
+    }
+    .panel-b-input {
+      flex: 1;
+      background: #1e1a30;
+      border: 1px solid #2d2640;
+      border-radius: 20px;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #c8c4e0;
+      outline: none;
+    }
+    .panel-b-send-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border: none;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ──────────────────────────────────────────────────────── */
+    /*  OPTION C — Warm, Contextual Floating Overlay           */
+    /* ──────────────────────────────────────────────────────── */
+
+    .comment-wrapper-c {
+      position: relative;
+    }
+    .gh-comment-actions-c {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-top: 1px solid #21262d;
+    }
+
+    .help-btn-c {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 163, 72, 0.35);
+      background: rgba(255, 163, 72, 0.08);
+      color: #ffa348;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-left: auto;
+      transition: all 0.15s;
+    }
+    .help-btn-c:hover {
+      background: rgba(255, 163, 72, 0.14);
+      border-color: rgba(255, 163, 72, 0.6);
+    }
+
+    /* Option C Panel */
+    .panel-c {
+      border-radius: 10px;
+      background: #1c1814;
+      border: 1px solid #3d3020;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255, 163, 72, 0.08);
+    }
+    .panel-c-header {
+      padding: 14px 16px;
+      background: #231e17;
+      border-bottom: 1px solid #3d3020;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ai-icon-c {
+      font-size: 20px;
+    }
+    .panel-c-title { font-size: 13px; font-weight: 600; color: #ffe4b2; }
+    .panel-c-file-ctx {
+      margin-left: auto;
+      font-size: 10px;
+      color: #6e5a3a;
+      background: #2c2218;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid #3d3020;
+    }
+    .panel-c-close {
+      background: none; border: none;
+      color: #5a4a30; cursor: pointer; font-size: 16px; margin-left: 8px;
+    }
+
+    .panel-c-body { padding: 16px; }
+
+    .understanding-block-c {
+      background: #231e17;
+      border-left: 3px solid #ffa348;
+      border-radius: 0 6px 6px 0;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: #c9b89a;
+      line-height: 1.6;
+    }
+    .understanding-block-c .label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #ffa348;
+      margin-bottom: 5px;
+    }
+
+    .approaches-c { display: flex; flex-direction: column; gap: 8px; }
+    .approach-c {
+      border: 1px solid #3d3020;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #201b14;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .approach-c:hover { border-color: rgba(255, 163, 72, 0.4); }
+    .approach-c-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .approach-c-num {
+      width: 20px; height: 20px;
+      border-radius: 4px;
+      background: rgba(255, 163, 72, 0.15);
+      border: 1px solid rgba(255, 163, 72, 0.3);
+      color: #ffa348;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .approach-c-title { font-size: 12px; font-weight: 600; color: #ffe4b2; }
+    .approach-c-desc { font-size: 12px; color: #8c7a60; line-height: 1.5; }
+    .approach-c-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .tag-c {
+      padding: 2px 8px; border-radius: 4px;
+      font-size: 10px; font-weight: 500;
+    }
+    .tag-c-pro { background: rgba(63,185,80,0.08); color: #56d364; border: 1px solid rgba(63,185,80,0.2); }
+    .tag-c-con { background: rgba(248,81,73,0.08); color: #f85149; border: 1px solid rgba(248,81,73,0.2); }
+
+    .panel-c-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #3d3020;
+      background: #1c1814;
+      align-items: center;
+    }
+    .panel-c-input {
+      flex: 1;
+      background: #231e17;
+      border: 1px solid #3d3020;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 12px;
+      color: #c9b89a;
+      outline: none;
+    }
+    .panel-c-send {
+      padding: 7px 14px;
+      border-radius: 6px;
+      background: rgba(255, 163, 72, 0.15);
+      border: 1px solid rgba(255, 163, 72, 0.35);
+      color: #ffa348;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>UI/UX Exploration — "Get Help from AI"</h1>
+    <p>3 design directions for the browser extension trigger icon and AI assistance panel</p>
+  </div>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('a')">
+      <span class="tab-label">
+        <span class="badge badge-a">A</span>
+        GitHub-Native
+      </span>
+    </button>
+    <button class="tab-btn" onclick="showTab('b')">
+      <span class="tab-label">
+        <span class="badge badge-b">B</span>
+        Bold AI-First
+      </span>
+    </button>
+    <button class="tab-btn" onclick="showTab('c')">
+      <span class="tab-label">
+        <span class="badge badge-c">C</span>
+        Warm Contextual
+      </span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  OPTION A                                               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="tab-a" class="tab-panel active">
+    <div class="option-title">
+      <h2>Option A — GitHub-Native</h2>
+      <span class="tagline">Invisible until needed. Familiar to GitHub users.</span>
+    </div>
+    <p class="design-concept">
+      The trigger lives quietly in the comment's action bar alongside existing GitHub controls — same styling, same scale.
+      The panel feels like a native GitHub sidebar: clean whites, monospace accents, minimal chrome.
+      <strong>Principle:</strong> don't break the GitHub mental model; augment it.
+    </p>
+
+    <div class="views">
+      <!-- Left: Comment with icon -->
+      <div>
+        <div class="view-label">Trigger — inline action bar</div>
+        <div class="gh-comment">
+          <div class="gh-comment-header">
+            <div class="gh-avatar gh-avatar-blue">SR</div>
+            <span class="gh-username">sarah-reviewer</span>
+            <span class="gh-timestamp">2 hours ago</span>
+          </div>
+          <div class="gh-comment-body">
+            This function reads the entire file into memory before processing.
+            For large files this could cause OOM issues — consider streaming
+            the input instead.
+          </div>
+          <div class="gh-comment-actions-a">
+            <button class="gh-reaction-btn">👍 2</button>
+            <button class="gh-reaction-btn">😕 1</button>
+            <button class="help-btn-a">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm1 13H7v-2h2v2zm1.07-7.75l-.9.92C8.45 6.9 8 7.5 8 9H7V8.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26C9.78 4.06 10 3.56 10 3c0-1.1-.9-2-2-2s-2 .9-2 2H5c0-1.66 1.34-3 3-3s3 1.34 3 3c0 .66-.27 1.26-.93 1.25z"/>
+              </svg>
+              Get Help from AI
+            </button>
+            <button class="gh-reply-btn">Reply</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Panel -->
+      <div>
+        <div class="view-label">Panel — right-side drawer</div>
+        <div class="panel-a">
+          <div class="panel-a-header">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="#58a6ff">
+              <path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm1 13H7v-2h2v2zm1.07-7.75l-.9.92C8.45 6.9 8 7.5 8 9H7V8.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26C9.78 4.06 10 3.56 10 3c0-1.1-.9-2-2-2s-2 .9-2 2H5c0-1.66 1.34-3 3-3s3 1.34 3 3c0 .66-.27 1.26-.93 1.25z"/>
+            </svg>
+            <span class="panel-a-title">AI Assistance</span>
+            <span class="context-chip">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 9h8v1H4zm0 2h8v1H4zm0 2h4v1H4z"/><path d="M14 2h-3V1a1 1 0 00-2 0v1H7V1a1 1 0 00-2 0v1H2a1 1 0 00-1 1v11a1 1 0 001 1h12a1 1 0 001-1V3a1 1 0 00-1-1z"/></svg>
+              process_data.py · line 42
+            </span>
+            <button class="panel-a-close">×</button>
+          </div>
+          <div class="panel-a-body">
+            <div class="ai-message-a">
+              <div class="section-title">Understanding the feedback</div>
+              The reviewer is flagging a memory efficiency issue. Loading a full file into memory is fine for small inputs, but risks OOM errors at scale. The underlying principle is <em>bounded resource consumption</em>.
+
+              <div class="section-title">Ways to address this</div>
+              <div class="approach-row">
+                <div class="approach-item">
+                  <div class="approach-name">① Stream with a generator</div>
+                  <div class="approach-meta">
+                    <span class="pro">✓ Zero extra memory · pythonic</span>
+                    <span class="con">✗ Can't random-access lines</span>
+                  </div>
+                </div>
+                <div class="approach-item">
+                  <div class="approach-name">② Chunk-read with buffer</div>
+                  <div class="approach-meta">
+                    <span class="pro">✓ Predictable memory cap</span>
+                    <span class="con">✗ More complex logic</span>
+                  </div>
+                </div>
+                <div class="approach-item">
+                  <div class="approach-name">③ mmap for read-only access</div>
+                  <div class="approach-meta">
+                    <span class="pro">✓ OS-managed paging</span>
+                    <span class="con">✗ Platform-specific limits</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-a-input">
+            <input type="text" placeholder="Ask a follow-up question…" />
+            <button class="panel-a-send">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  OPTION B                                               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="tab-b" class="tab-panel">
+    <div class="option-title">
+      <h2>Option B — Bold AI-First</h2>
+      <span class="tagline">AI is a first-class feature. Make it unmissable.</span>
+    </div>
+    <p class="design-concept">
+      The trigger is a pill-shaped gradient button — it doesn't pretend to be part of GitHub.
+      The panel has its own identity: deep purple-dark, glowing orb, card-based approaches.
+      <strong>Principle:</strong> the AI layer is a distinct product living on top of GitHub, not inside it.
+    </p>
+
+    <div class="views">
+      <!-- Left: Comment with button -->
+      <div>
+        <div class="view-label">Trigger — floating pill button</div>
+        <div class="gh-comment">
+          <div class="gh-comment-header">
+            <div class="gh-avatar gh-avatar-purple">SR</div>
+            <span class="gh-username">sarah-reviewer</span>
+            <span class="gh-timestamp">2 hours ago</span>
+          </div>
+          <div class="gh-comment-body">
+            This function reads the entire file into memory before processing.
+            For large files this could cause OOM issues — consider streaming
+            the input instead.
+          </div>
+          <div class="gh-comment-actions-b">
+            <button class="help-btn-b">
+              <span class="sparkle">✦</span>
+              Get Help from AI
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Panel -->
+      <div>
+        <div class="view-label">Panel — floating dark sheet</div>
+        <div class="panel-b">
+          <div class="panel-b-header">
+            <div class="ai-orb">✦</div>
+            <div>
+              <div class="panel-b-title">AI Code Reviewer</div>
+              <div class="panel-b-sub">process_data.py · line 42</div>
+            </div>
+            <button class="panel-b-close" style="margin-left:auto">×</button>
+          </div>
+          <div class="panel-b-body">
+            <div class="ai-bubble-b">
+              <div class="understanding">✦ Understanding the comment</div>
+              The reviewer is concerned about <strong style="color:#e2dff5">memory exhaustion</strong>.
+              Loading a full file into RAM blocks the process until it's done and can crash under load.
+              The principle: prefer <em>bounded, incremental I/O</em>.
+            </div>
+
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4a4560;margin-bottom:10px;">3 ways to address this</div>
+
+            <div class="approach-card-b">
+              <div class="approach-card-b-title">
+                <span class="approach-num">1</span>
+                Stream with a generator
+              </div>
+              <div style="font-size:12px;color:#7a7595;line-height:1.5;">Yield lines lazily — the OS buffers for you.</div>
+              <div class="tags-b">
+                <span class="tag-pro-b">✓ O(1) memory</span>
+                <span class="tag-pro-b">✓ Pythonic</span>
+                <span class="tag-con-b">✗ No random access</span>
+              </div>
+            </div>
+            <div class="approach-card-b">
+              <div class="approach-card-b-title">
+                <span class="approach-num">2</span>
+                Chunk-read with buffer
+              </div>
+              <div style="font-size:12px;color:#7a7595;line-height:1.5;">Read N bytes at a time with a fixed-size buffer.</div>
+              <div class="tags-b">
+                <span class="tag-pro-b">✓ Predictable cap</span>
+                <span class="tag-con-b">✗ More logic</span>
+              </div>
+            </div>
+            <div class="approach-card-b">
+              <div class="approach-card-b-title">
+                <span class="approach-num">3</span>
+                Memory-mapped file (mmap)
+              </div>
+              <div style="font-size:12px;color:#7a7595;line-height:1.5;">OS pages in only the parts you touch.</div>
+              <div class="tags-b">
+                <span class="tag-pro-b">✓ Fast random reads</span>
+                <span class="tag-con-b">✗ Platform limits</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel-b-input-row">
+            <input class="panel-b-input" type="text" placeholder="Ask anything about this comment…" />
+            <button class="panel-b-send-btn">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  OPTION C                                               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="tab-c" class="tab-panel">
+    <div class="option-title">
+      <h2>Option C — Warm Contextual</h2>
+      <span class="tagline">Approachable, amber-toned. Feels like a knowledgeable colleague.</span>
+    </div>
+    <p class="design-concept">
+      The trigger is an amber-tinted badge — warm and inviting, not cold and technical.
+      The panel uses earthy tones with a left-border accent to guide reading flow.
+      Approaches are expandable cards with clear context labels.
+      <strong>Principle:</strong> AI should feel like asking a senior colleague, not querying a system.
+    </p>
+
+    <div class="views">
+      <!-- Left: Comment with badge -->
+      <div>
+        <div class="view-label">Trigger — amber accent badge</div>
+        <div class="gh-comment">
+          <div class="gh-comment-header">
+            <div class="gh-avatar gh-avatar-green">SR</div>
+            <span class="gh-username">sarah-reviewer</span>
+            <span class="gh-timestamp">2 hours ago</span>
+          </div>
+          <div class="gh-comment-body">
+            This function reads the entire file into memory before processing.
+            For large files this could cause OOM issues — consider streaming
+            the input instead.
+          </div>
+          <div class="gh-comment-actions-c">
+            <button class="gh-reaction-btn">👍 2</button>
+            <button class="help-btn-c">
+              🤔 Get Help from AI
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Panel -->
+      <div>
+        <div class="view-label">Panel — warm overlay card</div>
+        <div class="panel-c">
+          <div class="panel-c-header">
+            <span class="ai-icon-c">🤔</span>
+            <div>
+              <div class="panel-c-title">Understanding this comment</div>
+            </div>
+            <span class="panel-c-file-ctx">process_data.py:42</span>
+            <button class="panel-c-close">×</button>
+          </div>
+          <div class="panel-c-body">
+            <div class="understanding-block-c">
+              <div class="label">What the reviewer means</div>
+              Loading the full file into a list holds everything in RAM until the function exits.
+              For files &gt; a few hundred MB this is a reliability risk.
+              The reviewer wants the code to handle arbitrarily large inputs safely.
+            </div>
+
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#6e5a3a;margin-bottom:10px;">Ways to address it</div>
+
+            <div class="approaches-c">
+              <div class="approach-c">
+                <div class="approach-c-header">
+                  <span class="approach-c-num">1</span>
+                  <span class="approach-c-title">Stream lines with a generator</span>
+                </div>
+                <div class="approach-c-desc">Replace the list comprehension with a generator that yields one line at a time. The caller gets the same interface, but memory use becomes O(1).</div>
+                <div class="approach-c-tags">
+                  <span class="tag-c tag-c-pro">✓ Minimal rewrite</span>
+                  <span class="tag-c tag-c-pro">✓ Zero RAM overhead</span>
+                  <span class="tag-c tag-c-con">✗ Can't seek backwards</span>
+                </div>
+              </div>
+
+              <div class="approach-c">
+                <div class="approach-c-header">
+                  <span class="approach-c-num">2</span>
+                  <span class="approach-c-title">Fixed-size chunked reads</span>
+                </div>
+                <div class="approach-c-desc">Read in blocks of N bytes. Gives you a hard memory ceiling and works well for binary data.</div>
+                <div class="approach-c-tags">
+                  <span class="tag-c tag-c-pro">✓ Predictable cap</span>
+                  <span class="tag-c tag-c-con">✗ More logic needed</span>
+                  <span class="tag-c tag-c-con">✗ Chunk boundaries need care</span>
+                </div>
+              </div>
+
+              <div class="approach-c">
+                <div class="approach-c-header">
+                  <span class="approach-c-num">3</span>
+                  <span class="approach-c-title">Memory-mapped file (mmap)</span>
+                </div>
+                <div class="approach-c-desc">The OS pages in only the regions you read. Ideal if you need fast random access without loading everything.</div>
+                <div class="approach-c-tags">
+                  <span class="tag-c tag-c-pro">✓ Fast random access</span>
+                  <span class="tag-c tag-c-con">✗ Platform differences</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-c-input-row">
+            <input class="panel-c-input" type="text" placeholder="Ask a follow-up…" />
+            <button class="panel-c-send">Ask →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showTab(id) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.add('active');
+      event.currentTarget.classList.add('active');
+    }
+  </script>
+</body>
+</html>
