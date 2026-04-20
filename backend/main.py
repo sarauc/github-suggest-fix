@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import config
 from routes.health import router as health_router
 from routes.index import router as index_router
+from routes.analyze import router as analyze_router
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -52,6 +53,7 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(index_router)
+app.include_router(analyze_router)
 
 
 @app.on_event("startup")

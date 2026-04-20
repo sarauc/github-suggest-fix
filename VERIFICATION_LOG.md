@@ -126,7 +126,51 @@ repo=sarauc/code-review-graph  query="community detection"
 ---
 
 ## Milestone 4 — Claude Integration + Prompt
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-20
+
+### Steps
+```bash
+# Terminal 1
+cd backend && bash start.sh
+
+# Terminal 2
+cd backend && source .venv/bin/activate
+python test_m4_claude.py \
+  --anthropic-key sk-ant-... \
+  --github-token  ghp_... \
+  --repo  sarauc/code-review-graph \
+  --pr    1 \
+  --comment-id 3107811549
+```
+
+### Result
+```
+=== M4 Claude Integration Test ===
+repo=sarauc/code-review-graph  PR=#1  comment=3107811549
+
+Fetching comment data from GitHub...
+  comment: Can you explain what the function is for, and how is it used...
+  file:    code_review_graph/communities.py (700 lines)
+
+1. POST /analyze (streaming...)
+  [PASS] streamed response: 2858 chars
+  [PASS] contains reviewer interpretation
+  [PASS] contains multiple options/approaches
+
+2. POST /chat (follow-up, streaming...)
+  [PASS] chat follow-up streamed: 2710 chars
+
+3. Error handling — invalid API key
+  [PASS] structured error returned: code=invalid_key
+
+=== All M4 checks complete ===
+```
+
+### Notes
+- Prompt structure (interpretation → options → tradeoffs) working correctly
+- SSE streaming working end-to-end
+- Error codes mapped correctly (invalid_key, rate_limit, etc.)
 
 ---
 
