@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PR Review AI Assistant</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="header">
+    <span class="orb">✦</span>
+    <div>
+      <div class="title">PR Review AI</div>
+      <div class="subtitle">Assistant Settings</div>
+    </div>
+    <div class="status-dot" id="statusDot" title="Backend status"></div>
+  </div>
+
+  <div class="content">
+    <div class="field">
+      <label for="anthropicKey">Anthropic API Key</label>
+      <input
+        type="password"
+        id="anthropicKey"
+        placeholder="sk-ant-..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <div class="field">
+      <label for="githubToken">GitHub Personal Access Token</label>
+      <input
+        type="password"
+        id="githubToken"
+        placeholder="ghp_..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <div class="field">
+      <label for="backendUrl">Backend URL</label>
+      <input
+        type="text"
+        id="backendUrl"
+        placeholder="http://127.0.0.1:8765"
+        spellcheck="false"
+      />
+    </div>
+
+    <div id="errorMsg" class="error-msg" hidden></div>
+
+    <button id="saveBtn" class="save-btn">Save Settings</button>
+
+    <div id="savedMsg" class="saved-msg" hidden>✓ Saved</div>
+  </div>
+
+  <div class="footer">
+    <span id="backendStatus" class="backend-label">Checking backend...</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

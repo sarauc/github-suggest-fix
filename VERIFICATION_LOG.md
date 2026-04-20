@@ -175,7 +175,25 @@ Fetching comment data from GitHub...
 ---
 
 ## Milestone 5 — Chrome Extension Scaffold + Settings
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-20
+
+### Steps
+1. Go to `chrome://extensions`, enable Developer mode
+2. Click Load unpacked → select `extension/` folder
+3. Click extension icon → popup opens
+4. Enter Anthropic key + GitHub PAT → Save Settings
+5. Right-click popup → Inspect → Application → Extension Storage → Sync
+6. Run `chrome.storage.sync.get(null, console.log)` in Console
+
+### Result
+- All 3 values saved in sync storage: `anthropicKey`, `githubToken`, `backendUrl`
+- Backend status showed "offline" initially — expected due to 30s ping interval
+- Two `GET /health 200 OK` entries visible in server log confirming background.js is pinging correctly
+
+### Notes
+- "Backend offline" on first popup open is expected — background service worker pings every 30s; reopening after 30s shows "✓ Backend running"
+- Placeholder content.js and content.css stubs added to satisfy manifest (filled in M6)
 
 ---
 
