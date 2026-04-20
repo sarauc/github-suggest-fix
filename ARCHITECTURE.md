@@ -71,8 +71,8 @@
 | Browser extension | Chrome MV3, vanilla JS | No bundler complexity for MVP |
 | Backend framework | Python 3.8+ + FastAPI | Async-native, easy SSE, fast to iterate |
 | ASGI server | Uvicorn | Ships with FastAPI |
-| Vector store | ChromaDB (embedded) | Zero-config, runs in-process, no external server |
-| Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2`) | Local, free, ~80MB, good quality |
+| Vector store | BM25 (`rank_bm25`) + JSON file per repo | Pure Python, zero system dependencies, fast enough for MVP |
+| Embeddings | None (BM25 keyword retrieval) | sentence-transformers crashed on Python 3.8/macOS; BM25 is sufficient for MVP |
 | AI model | `claude-sonnet-4-5` | Best cost/quality balance; configurable |
 | Streaming | Server-Sent Events (SSE) | Simple, native browser support, no WebSocket overhead |
 | Conversation storage | `localStorage` | Per-PRD requirement; zero backend dependency |

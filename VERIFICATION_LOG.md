@@ -76,7 +76,52 @@ repo=sarauc/code-review-graph  PR=#1  comment=3107811549
 ---
 
 ## Milestone 3 — Repo Indexer + Vector Store
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-19
+
+### Steps
+```bash
+cd backend
+# Start server, then run integration test against real repo:
+python test_m3_indexer.py \
+  --token ghp_... \
+  --repo  owner/repo \
+  --query "your search term"
+```
+
+### Result
+```
+=== M3 Indexer + Vector Store Test ===
+repo=sarauc/code-review-graph  query="community detection"
+
+1. POST /index
+  [PASS] triggered: Indexing started
+
+2. GET /index/status (polling...)
+     status=indexing  progress=0%
+     status=indexing  progress=13%
+     status=indexing  progress=42%
+     status=indexing  progress=72%
+     status=indexing  progress=97%
+     status=indexed  progress=0%
+  [PASS] indexed: files=237  chunks=1595
+
+3. Query vector store
+  [PASS] chunks returned: 3
+
+  Chunk 1: code_review_graph/eval/benchmarks/build_performance.py (lines 1–55)
+  Chunk 2: code_review_graph/eval/benchmarks/build_performance.py (lines 52–60)
+  Chunk 3: code_review_graph/postprocessing.py (lines 105–134)
+
+=== All checks complete ===
+```
+
+### Notes
+- ChromaDB dropped — requires sqlite3 >= 3.35.0, not available on macOS Python 3.8
+- sentence-transformers dropped — bus error on Python 3.8/macOS
+- Replaced with rank_bm25 + numpy (pure Python, zero system deps, sufficient for MVP)
+- Tokenizer splits on all non-alphanumeric chars including underscores so "stream_lines" matches "stream"
+- `int | None` syntax incompatible with Python 3.8 — use `Optional[int]` from `typing` throughout
 
 ---
 
