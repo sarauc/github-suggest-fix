@@ -1,4 +1,6 @@
-/* ── Get AI Help button — Option B style ─────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   Get AI Help button — Option B style
+   ══════════════════════════════════════════════════════════════ */
 
 .gh-ai-help-btn {
   display: inline-flex;
@@ -20,12 +22,12 @@
   line-height: 1;
 }
 
-.gh-ai-help-btn:hover:not(:disabled) {
+.gh-ai-help-btn:hover:not(.gh-ai-offline) {
   opacity: 0.9;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.5);
 }
 
-.gh-ai-help-btn:active:not(:disabled) {
+.gh-ai-help-btn:active:not(.gh-ai-offline) {
   opacity: 0.8;
 }
 
@@ -34,15 +36,13 @@
   color: #8b949e;
   box-shadow: none;
   cursor: not-allowed;
-  pointer-events: auto; /* keep hover active so title tooltip shows */
+  pointer-events: auto;
 }
 
 .gh-ai-sparkle {
   font-size: 13px;
   line-height: 1;
 }
-
-/* ── Fallback action bar (when GitHub provides no toolbar) ────── */
 
 .gh-ai-action-bar {
   display: flex;
@@ -51,3 +51,258 @@
   border-top: 1px solid var(--color-border-default, #30363d);
   margin-top: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Panel — Option B Bold AI-First
+   ══════════════════════════════════════════════════════════════ */
+
+#gh-ai-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 100vh;
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#gh-ai-panel.gh-ai-panel-hidden  { transform: translateX(100%); }
+#gh-ai-panel.gh-ai-panel-visible { transform: translateX(0); }
+
+.gh-ai-panel-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #13111c;
+  border-left: 1px solid #2d2640;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.gh-ai-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #1e1333 0%, #16112b 100%);
+  border-bottom: 1px solid #2d2640;
+  flex-shrink: 0;
+}
+
+.gh-ai-orb {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+}
+
+.gh-ai-panel-title-block { flex: 1; min-width: 0; }
+
+.gh-ai-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f0f0ff;
+}
+
+.gh-ai-panel-subtitle {
+  font-size: 11px;
+  color: #6e6a8a;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-ai-panel-close {
+  background: none;
+  border: none;
+  color: #4a4560;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.gh-ai-panel-close:hover { color: #c8c4e0; }
+
+/* ── Body ────────────────────────────────────────────────── */
+
+.gh-ai-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar */
+.gh-ai-panel-body::-webkit-scrollbar       { width: 4px; }
+.gh-ai-panel-body::-webkit-scrollbar-track { background: transparent; }
+.gh-ai-panel-body::-webkit-scrollbar-thumb { background: #2d2640; border-radius: 2px; }
+
+/* ── Loading ─────────────────────────────────────────────── */
+
+.gh-ai-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #6e6a8a;
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.gh-ai-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #2d2640;
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: gh-ai-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes gh-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Messages ────────────────────────────────────────────── */
+
+.gh-ai-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gh-ai-message {
+  font-size: 13px;
+  line-height: 1.65;
+  border-radius: 10px;
+  padding: 12px 14px;
+  word-break: break-word;
+}
+
+.gh-ai-message-assistant {
+  background: linear-gradient(135deg, #1e1333, #1a1628);
+  border: 1px solid #2d2640;
+  color: #c8c4e0;
+  border-radius: 10px 10px 10px 2px;
+}
+
+.gh-ai-message-user {
+  background: #1e1a30;
+  border: 1px solid #2d2640;
+  color: #a8a4c0;
+  border-radius: 10px 10px 2px 10px;
+  align-self: flex-end;
+  max-width: 90%;
+}
+
+/* Markdown elements inside messages */
+.gh-ai-message h2,
+.gh-ai-message h3 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #a78bfa;
+  margin: 14px 0 6px;
+}
+.gh-ai-message h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2dff5;
+  margin: 10px 0 4px;
+}
+.gh-ai-message p  { margin: 4px 0; }
+.gh-ai-message li {
+  margin: 3px 0 3px 16px;
+  list-style: disc;
+}
+.gh-ai-message li.pro { color: #3fb950; list-style: none; margin-left: 0; }
+.gh-ai-message li.pro::before { content: "✓ "; }
+.gh-ai-message li.con { color: #f85149; list-style: none; margin-left: 0; }
+.gh-ai-message li.con::before { content: "✗ "; }
+.gh-ai-message strong { color: #e2dff5; font-weight: 600; }
+.gh-ai-message em     { color: #c8c4e0; font-style: italic; }
+.gh-ai-message code {
+  background: #2d2050;
+  color: #d2a8ff;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 12px;
+}
+
+/* ── Error ───────────────────────────────────────────────── */
+
+.gh-ai-error {
+  font-size: 13px;
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
+/* ── Input row ───────────────────────────────────────────── */
+
+.gh-ai-input-row {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid #2d2640;
+  background: #13111c;
+  flex-shrink: 0;
+}
+
+.gh-ai-input {
+  flex: 1;
+  background: #1e1a30;
+  border: 1px solid #2d2640;
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #c8c4e0;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+
+.gh-ai-input:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.gh-ai-input::placeholder { color: #4a4560; }
+
+.gh-ai-send-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.gh-ai-send-btn:hover  { opacity: 0.9; }
+.gh-ai-send-btn:active { opacity: 0.8; }

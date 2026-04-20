@@ -1,13 +1,17 @@
 // ── Constants ─────────────────────────────────────────────────────
 
-const BUTTON_CLASS  = "gh-ai-help-btn";
-const INJECTED_ATTR = "data-ai-injected";
+const BUTTON_CLASS   = "gh-ai-help-btn";
+const INJECTED_ATTR  = "data-ai-injected";
+const BACKEND_URL    = "http://127.0.0.1:8765";
 
 // ── State ─────────────────────────────────────────────────────────
 
-let backendAlive = false;
-let currentUserLogin = null;
-let prAuthorLogin = null;
+let backendAlive      = false;
+let currentUserLogin  = null;
+let prAuthorLogin     = null;
+let activeCommentId   = null;
+let conversationHistory = [];   // [{role, content}] for current comment
+let currentReader     = null;   // active SSE reader — aborted on panel close
 
 // ── Initialise ────────────────────────────────────────────────────
 
@@ -19,6 +23,8 @@ async function init() {
 
   if (!currentUserLogin || !prAuthorLogin) return;
   if (currentUserLogin !== prAuthorLogin) return;
+
+  createPanel();
 
   chrome.runtime.sendMessage({ type: "GET_BACKEND_STATUS" }, (res) => {
     backendAlive = res?.alive ?? false;
@@ -32,12 +38,13 @@ async function init() {
     }
   });
 
-  // Watch for dynamically loaded comment threads
+  document.addEventListener("gh-ai:open", (e) => openPanel(e.detail));
+
   const observer = new MutationObserver(debounce(injectButtons, 300));
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// ── Page detection ────────────────────────────────────────────────
+// ── Page / user detection ─────────────────────────────────────────
 
 function isPRPage() {
   return /\/pull\/\d+/.test(window.location.pathname);
@@ -48,7 +55,6 @@ function getCurrentUserLogin() {
 }
 
 function getPRAuthorLogin() {
-  // Try multiple selectors GitHub uses across its UI versions
   const selectors = [
     ".gh-header-meta a.author",
     ".pull-request-tab-content a.author",
@@ -62,73 +68,65 @@ function getPRAuthorLogin() {
   return null;
 }
 
-// ── Comment selectors ─────────────────────────────────────────────
+function getPRInfo() {
+  // pathname: /owner/repo/pull/123
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  return {
+    repo:     `${parts[0]}/${parts[1]}`,
+    prNumber: parseInt(parts[3], 10),
+  };
+}
+
+// ── Button injection ──────────────────────────────────────────────
 
 function findUninjectedActionBars() {
-  // Target the action bar directly — this avoids double-matching nested elements.
-  // GitHub uses .timeline-comment-actions for inline review comments.
   return document.querySelectorAll(
     `.timeline-comment-actions:not([${INJECTED_ATTR}])`
   );
 }
 
-// ── Comment ID extraction ─────────────────────────────────────────
-
 function extractCommentId(actionBarEl) {
-  const commentContainer = actionBarEl.closest(
+  const container = actionBarEl.closest(
     ".review-comment, .js-comment, [id^='discussion_r'], .timeline-comment"
   );
-  if (!commentContainer) return null;
+  if (!container) return null;
 
-  // 1. Look for delete form — action="/repo/pull/1/review_comment/12345"
-  const deleteForm = commentContainer.querySelector(
-    'form[action*="review_comment"]'
-  );
+  const deleteForm = container.querySelector('form[action*="review_comment"]');
   if (deleteForm) {
-    const match = deleteForm.action.match(/review_comment\/(\d+)/);
-    if (match) return match[1];
+    const m = deleteForm.action.match(/review_comment\/(\d+)/);
+    if (m) return m[1];
   }
 
-  // 2. Look for a hidden input with the comment ID value
-  const hiddenInput = commentContainer.querySelector('input[name="input[id]"]');
+  const hiddenInput = container.querySelector('input[name="input[id]"]');
   if (hiddenInput?.value) return hiddenInput.value;
 
-  // 3. Look for permalink anchor — href="#discussion_r12345"
-  const permalink = commentContainer.querySelector(
-    'a[href*="#discussion_r"], a[id*="discussion_r"]'
-  );
+  const permalink = container.querySelector('a[href*="#discussion_r"], a[id*="discussion_r"]');
   if (permalink) {
-    const match = (permalink.href || permalink.id).match(/discussion_r(\d+)/);
-    if (match) return match[1];
+    const m = (permalink.href || permalink.id).match(/discussion_r(\d+)/);
+    if (m) return m[1];
   }
 
-  // 4. Fall back to container's own id attribute
-  const id = commentContainer.id || "";
-  const match = id.match(/\d+/);
-  return match ? match[0] : null;
+  const m = (container.id || "").match(/\d+/);
+  return m ? m[0] : null;
 }
 
-// ── Button injection ──────────────────────────────────────────────
+function extractCommentBody(actionBarEl) {
+  const container = actionBarEl.closest(".review-comment, .js-comment, .timeline-comment");
+  return container?.querySelector(".comment-body")?.innerText?.trim() || "";
+}
 
 function injectButtons() {
-  const actionBars = findUninjectedActionBars();
-  actionBars.forEach((actionBar) => {
-    // Guard: skip if a button already exists in this bar
-    if (actionBar.querySelector(`.${BUTTON_CLASS}`)) {
-      actionBar.setAttribute(INJECTED_ATTR, "true");
+  findUninjectedActionBars().forEach((bar) => {
+    if (bar.querySelector(`.${BUTTON_CLASS}`)) {
+      bar.setAttribute(INJECTED_ATTR, "true");
       return;
     }
+    const commentId = extractCommentId(bar);
+    bar.setAttribute(INJECTED_ATTR, "true");
+    if (!commentId) return;
 
-    const commentId = extractCommentId(actionBar);
-    if (!commentId) {
-      actionBar.setAttribute(INJECTED_ATTR, "true"); // skip permanently
-      return;
-    }
-
-    actionBar.setAttribute(INJECTED_ATTR, "true");
-
-    const btn = createHelpButton(commentId, actionBar);
-    actionBar.appendChild(btn);
+    const btn = createHelpButton(commentId, bar);
+    bar.appendChild(btn);
   });
 }
 
@@ -143,7 +141,6 @@ function createHelpButton(commentId, actionBarEl) {
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     if (btn.classList.contains("gh-ai-offline")) return;
-
     document.dispatchEvent(new CustomEvent("gh-ai:open", {
       detail: {
         commentId,
@@ -156,7 +153,6 @@ function createHelpButton(commentId, actionBarEl) {
 }
 
 function updateButtonState(btn) {
-  // Don't use btn.disabled — disabled elements don't show tooltips in Chrome
   btn.title = backendAlive
     ? "Get AI help understanding this comment"
     : "Backend offline — run: bash start.sh";
@@ -164,11 +160,321 @@ function updateButtonState(btn) {
   btn.setAttribute("aria-disabled", String(!backendAlive));
 }
 
-function extractCommentBody(actionBarEl) {
-  const container = actionBarEl.closest(
-    ".review-comment, .js-comment, .timeline-comment"
-  );
-  return container?.querySelector(".comment-body")?.innerText?.trim() || "";
+// ── Panel DOM ─────────────────────────────────────────────────────
+
+function createPanel() {
+  if (document.getElementById("gh-ai-panel")) return;
+
+  const panel = document.createElement("div");
+  panel.id = "gh-ai-panel";
+  panel.className = "gh-ai-panel-hidden";
+  panel.innerHTML = `
+    <div class="gh-ai-panel-inner">
+      <div class="gh-ai-panel-header">
+        <div class="gh-ai-orb">✦</div>
+        <div class="gh-ai-panel-title-block">
+          <div class="gh-ai-panel-title">AI Code Reviewer</div>
+          <div class="gh-ai-panel-subtitle" id="gh-ai-subtitle"></div>
+        </div>
+        <button class="gh-ai-panel-close" id="gh-ai-close" title="Close">×</button>
+      </div>
+
+      <div class="gh-ai-panel-body" id="gh-ai-body">
+        <div class="gh-ai-loading" id="gh-ai-loading">
+          <div class="gh-ai-spinner"></div>
+          <span>Analyzing comment…</span>
+        </div>
+        <div class="gh-ai-messages" id="gh-ai-messages"></div>
+      </div>
+
+      <div class="gh-ai-input-row" id="gh-ai-input-row">
+        <input
+          id="gh-ai-input"
+          class="gh-ai-input"
+          type="text"
+          placeholder="Ask a follow-up question…"
+          autocomplete="off"
+        />
+        <button id="gh-ai-send" class="gh-ai-send-btn" title="Send">↑</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(panel);
+
+  document.getElementById("gh-ai-close").addEventListener("click", closePanel);
+
+  const input = document.getElementById("gh-ai-input");
+  document.getElementById("gh-ai-send").addEventListener("click", () => sendFollowUp());
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFollowUp(); }
+  });
+}
+
+// ── Panel open / close ────────────────────────────────────────────
+
+async function openPanel({ commentId, commentBody }) {
+  // Single-panel rule: abort any in-flight request
+  abortCurrentStream();
+
+  activeCommentId      = commentId;
+  conversationHistory  = [];
+
+  const panel = document.getElementById("gh-ai-panel");
+  panel.classList.remove("gh-ai-panel-hidden");
+  panel.classList.add("gh-ai-panel-visible");
+
+  // Update subtitle with comment snippet
+  document.getElementById("gh-ai-subtitle").textContent =
+    commentBody ? `"${commentBody.slice(0, 60)}…"` : `Comment #${commentId}`;
+
+  // Reset body
+  document.getElementById("gh-ai-loading").style.display = "flex";
+  document.getElementById("gh-ai-messages").innerHTML = "";
+  document.getElementById("gh-ai-input").value = "";
+  document.getElementById("gh-ai-input-row").style.display = "none";
+
+  // Fetch settings then call /analyze
+  const settings = await getSettings();
+  if (!settings.anthropicKey || !settings.githubToken) {
+    showError("Please add your Anthropic API key and GitHub token in the extension settings.");
+    return;
+  }
+
+  const { repo, prNumber } = getPRInfo();
+
+  await streamAnalyze({
+    repo,
+    prNumber,
+    commentId,
+    commentBody,
+    settings,
+  });
+}
+
+function closePanel() {
+  abortCurrentStream();
+  const panel = document.getElementById("gh-ai-panel");
+  panel.classList.remove("gh-ai-panel-visible");
+  panel.classList.add("gh-ai-panel-hidden");
+  activeCommentId = null;
+}
+
+function abortCurrentStream() {
+  if (currentReader) {
+    currentReader.cancel();
+    currentReader = null;
+  }
+}
+
+// ── Settings ──────────────────────────────────────────────────────
+
+function getSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(["anthropicKey", "githubToken", "backendUrl"], (data) => {
+      resolve({
+        anthropicKey: data.anthropicKey  || "",
+        githubToken:  data.githubToken   || "",
+        backendUrl:   data.backendUrl    || BACKEND_URL,
+      });
+    });
+  });
+}
+
+// ── SSE streaming ─────────────────────────────────────────────────
+
+async function streamAnalyze({ repo, prNumber, commentId, commentBody, settings }) {
+  try {
+    const response = await fetch(`${settings.backendUrl}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo,
+        pr_number:    prNumber,
+        comment_id:   commentId,
+        comment_body: commentBody,
+        diff_hunk:    "",        // enriched in M8
+        file_path:    "",        // enriched in M8
+        file_content: "",        // enriched in M8
+        github_token: settings.githubToken,
+        anthropic_key: settings.anthropicKey,
+      }),
+    });
+
+    if (!response.ok) {
+      showError(`Backend error: HTTP ${response.status}`);
+      return;
+    }
+
+    document.getElementById("gh-ai-loading").style.display = "none";
+    const msgEl = appendMessage("assistant");
+
+    await readSSEStream(response, (token) => {
+      appendToken(msgEl, token);
+    });
+
+    // Save to conversation history
+    conversationHistory.push({
+      role: "assistant",
+      content: msgEl.dataset.raw || msgEl.innerText,
+    });
+
+    // Show input bar
+    document.getElementById("gh-ai-input-row").style.display = "flex";
+    document.getElementById("gh-ai-input").focus();
+
+  } catch (err) {
+    showError(`Could not reach backend: ${err.message}`);
+  }
+}
+
+async function streamChat(userMessage, settings) {
+  try {
+    const response = await fetch(`${settings.backendUrl}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo:       getPRInfo().repo,
+        comment_id: activeCommentId,
+        user_message: userMessage,
+        conversation_history: conversationHistory,
+        anthropic_key: settings.anthropicKey,
+      }),
+    });
+
+    if (!response.ok) {
+      showError(`Backend error: HTTP ${response.status}`);
+      return;
+    }
+
+    const msgEl = appendMessage("assistant");
+
+    await readSSEStream(response, (token) => {
+      appendToken(msgEl, token);
+    });
+
+    conversationHistory.push({
+      role: "assistant",
+      content: msgEl.dataset.raw || msgEl.innerText,
+    });
+
+  } catch (err) {
+    showError(`Could not reach backend: ${err.message}`);
+  }
+}
+
+async function readSSEStream(response, onToken) {
+  const reader = response.body.getReader();
+  currentReader = reader;
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete last line
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          if (event.type === "token") onToken(event.content);
+          if (event.type === "error") { showError(event.message); return; }
+          if (event.type === "done")  return;
+        } catch { /* skip malformed lines */ }
+      }
+    }
+  } finally {
+    currentReader = null;
+  }
+}
+
+// ── Follow-up ─────────────────────────────────────────────────────
+
+async function sendFollowUp() {
+  const input = document.getElementById("gh-ai-input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  abortCurrentStream();
+  input.value = "";
+
+  // Show user message
+  const userEl = appendMessage("user");
+  userEl.innerHTML = escapeHtml(text);
+  conversationHistory.push({ role: "user", content: text });
+
+  const settings = await getSettings();
+  await streamChat(text, settings);
+}
+
+// ── Message rendering ─────────────────────────────────────────────
+
+function appendMessage(role) {
+  const messages = document.getElementById("gh-ai-messages");
+  const el = document.createElement("div");
+  el.className = `gh-ai-message gh-ai-message-${role}`;
+  el.dataset.raw = "";
+  messages.appendChild(el);
+  // Scroll to bottom
+  const body = document.getElementById("gh-ai-body");
+  body.scrollTop = body.scrollHeight;
+  return el;
+}
+
+function appendToken(msgEl, token) {
+  msgEl.dataset.raw += token;
+  msgEl.innerHTML = renderMarkdown(msgEl.dataset.raw);
+  // Keep scrolled to bottom
+  const body = document.getElementById("gh-ai-body");
+  body.scrollTop = body.scrollHeight;
+}
+
+// Lightweight regex markdown renderer
+function renderMarkdown(text) {
+  return text
+    .split("\n")
+    .map((line) => {
+      // Headers
+      if (line.startsWith("#### ")) return `<h4>${esc(line.slice(5))}</h4>`;
+      if (line.startsWith("### "))  return `<h3>${esc(line.slice(4))}</h3>`;
+      if (line.startsWith("## "))   return `<h2>${esc(line.slice(3))}</h2>`;
+      // List items
+      if (/^[-*] /.test(line))      return `<li>${inlineMarkdown(line.slice(2))}</li>`;
+      if (/^✓ |^- ✓ /.test(line))   return `<li class="pro">${inlineMarkdown(line.replace(/^[-*]?\s?✓\s?/, ""))}</li>`;
+      if (/^✗ |^- ✗ /.test(line))   return `<li class="con">${inlineMarkdown(line.replace(/^[-*]?\s?✗\s?/, ""))}</li>`;
+      // Blank lines
+      if (line.trim() === "")       return "<br>";
+      return `<p>${inlineMarkdown(line)}</p>`;
+    })
+    .join("");
+}
+
+function inlineMarkdown(text) {
+  return esc(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g,     "<em>$1</em>")
+    .replace(/`(.+?)`/g,       "<code>$1</code>");
+}
+
+function esc(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtml(str) { return esc(str); }
+
+function showError(msg) {
+  document.getElementById("gh-ai-loading").style.display = "none";
+  document.getElementById("gh-ai-input-row").style.display = "none";
+  const messages = document.getElementById("gh-ai-messages");
+  messages.innerHTML = `<div class="gh-ai-error">${escapeHtml(msg)}</div>`;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────
@@ -183,11 +489,11 @@ function debounce(fn, ms) {
 
 // ── Boot ──────────────────────────────────────────────────────────
 
-// Re-init on GitHub SPA navigation
 let lastPath = location.pathname;
 new MutationObserver(debounce(() => {
   if (location.pathname !== lastPath) {
     lastPath = location.pathname;
+    closePanel();
     init();
   }
 }, 500)).observe(document.body, { childList: true, subtree: true });
