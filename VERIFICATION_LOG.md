@@ -28,7 +28,50 @@ curl http://localhost:8765/health
 ---
 
 ## Milestone 2 — GitHub API Client
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-19
+
+### Steps
+```bash
+cd backend
+source .venv/bin/activate
+python test_m2_github_client.py \
+  --token ghp_... \
+  --repo sarauc/code-review-graph \
+  --pr 1 \
+  --comment-id 3107811549
+```
+
+### Result
+```
+=== M2 GitHub Client Test ===
+repo=sarauc/code-review-graph  PR=#1  comment=3107811549
+
+1. get_pr_comment()
+  [PASS] comment body: Can you explain what the function is for, and how is it used in the change?
+  [PASS] diff_hunk: ...
+  [PASS] file_path: code_review_graph/communities.py
+  [PASS] commit_id: 97bb8d0d9485
+
+2. get_pr_head_ref()
+  [PASS] head SHA: 97bb8d0d9485
+
+3. get_file_content()
+  [PASS] file lines: 700
+  [PASS] first line: """Community/cluster detection for the code knowledge graph.
+
+4. get_repo_tree()
+  [PASS] total files: 185
+  [PASS] found commented file in tree: code_review_graph/communities.py
+
+5. get_file_blob()
+  [PASS] blob lines: 700
+
+=== All checks complete ===
+```
+
+### Notes
+- Fixed `int | None` type union syntax (Python 3.10+ only) → replaced with `Optional[int]` from `typing` for 3.8 compatibility
 
 ---
 
