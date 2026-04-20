@@ -198,7 +198,27 @@ Fetching comment data from GitHub...
 ---
 
 ## Milestone 6 — Content Script: Button Injection
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-20
+
+### Steps
+1. Reload extension at `chrome://extensions`
+2. Navigate to a GitHub PR where you are the author
+3. Verify one `✦ Get AI Help` button appears per inline and overall review comment
+4. Stop backend → button turns grey with tooltip "Backend offline — run: bash start.sh"
+5. Start backend → button becomes active and clickable
+
+### Result
+- One button per comment (inline and overall) ✓
+- Button active when backend running ✓
+- Button grey + unclickable when backend offline ✓
+- Tooltip visible on hover when offline ✓
+
+### Notes
+- Initial attempt used both `.review-comment` and `.js-comment` selectors — caused duplicate buttons; fixed by targeting `.timeline-comment-actions` directly
+- Comment ID extraction from DOM `id` attributes was unreliable; fixed to read from delete form action URL (`/review_comment/12345`)
+- `btn.disabled = true` prevents Chrome from showing `title` tooltips; fixed by using `aria-disabled` + CSS class instead
+- MutationObserver debounced at 300ms to prevent rapid-fire re-injection
 
 ---
 
