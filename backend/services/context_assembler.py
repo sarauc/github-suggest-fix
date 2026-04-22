@@ -95,6 +95,7 @@ def build_analyze_messages(
     repo: str,
     pr_files: Optional[List[dict]] = None,
     import_deps: Optional[List[Tuple[str, str]]] = None,
+    is_outdated: bool = False,
 ) -> List[dict]:
     """Build the messages list for the first-turn /analyze call.
 
@@ -109,8 +110,12 @@ def build_analyze_messages(
 
     # ── 2. Diff hunk (pinpoint target — placed second, high attention weight)
     if diff_hunk:
+        outdated_note = (
+            "\nNote: this comment was made on an earlier version of the PR. "
+            "The current file is provided below; this diff hunk may no longer apply exactly."
+        ) if is_outdated else ""
         sections.append(
-            f"--- CHANGED LINES (the exact code the reviewer is commenting on) ---\n{diff_hunk}"
+            f"--- CHANGED LINES (the exact code the reviewer is commenting on){outdated_note} ---\n{diff_hunk}"
         )
 
     # ── 3. Full file content ──────────────────────────────────────

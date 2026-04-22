@@ -329,8 +329,12 @@ async function openPanel({ commentId, commentBody }) {
   document.getElementById("gh-ai-input-row").style.display = "none";
 
   const settings = await getSettings();
-  if (!settings.anthropicKey || !settings.githubToken) {
-    showError("Please add your Anthropic API key and GitHub token in the extension settings.");
+  if (!settings.githubToken) {
+    showError("No GitHub token found. Please add your GitHub Personal Access Token in the extension settings (click the extension icon in your toolbar).");
+    return;
+  }
+  if (!settings.anthropicKey) {
+    showError("No Anthropic API key found. Please add your API key in the extension settings (click the extension icon in your toolbar).");
     return;
   }
 

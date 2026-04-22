@@ -1,7 +1,9 @@
+import asyncio
+import json
 import logging
 import os
 import re
-from typing import List, Optional, Tuple
+from typing import AsyncGenerator, List, Optional, Tuple
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -14,10 +16,12 @@ from services.context_assembler import (
     build_chat_messages,
 )
 from services.github_client import (
+    GitHubAuthError,
     GitHubError,
     get_file_content,
     get_pr_comment,
     get_pr_files,
+    get_pr_head_ref,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,27 +113,57 @@ async def _fetch_import_deps(
 
 # ── Full context enrichment ───────────────────────────────────────
 
+async def _error_event_stream(message: str) -> AsyncGenerator[str, None]:
+    """Yield a single SSE error event — used to surface critical errors before streaming starts."""
+    yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
+
+
 async def _fetch_full_context(body: AnalyzeRequest):
     """Fetch all context needed for the analyze prompt.
 
-    Returns (enriched_body, pr_files, import_deps).
+    Returns (enriched_body, pr_files, import_deps, is_outdated, auth_error).
+    auth_error is None on success, or an error message string on GitHub auth failure.
     """
     diff_hunk    = body.diff_hunk
     file_path    = body.file_path
     file_content = body.file_content
     commit_id    = ""
+    is_outdated  = False
+    auth_error   = None
 
-    # 1. Fetch comment data + file content if not provided
+    # 1. Fetch comment data + PR head SHA in parallel, then fetch file content
     if not file_content:
         try:
-            comment = await get_pr_comment(body.repo, int(body.comment_id), body.github_token)
-            file_content = await get_file_content(
-                body.repo, comment.file_path, comment.commit_id, body.github_token
+            comment_result, head_result = await asyncio.gather(
+                get_pr_comment(body.repo, int(body.comment_id), body.github_token),
+                get_pr_head_ref(body.repo, body.pr_number, body.github_token),
+                return_exceptions=True,
             )
-            diff_hunk  = comment.diff_hunk
-            file_path  = comment.file_path
-            commit_id  = comment.commit_id
-        except GitHubError as e:
+
+            if isinstance(comment_result, GitHubAuthError):
+                auth_error = (
+                    "Could not authenticate with GitHub. "
+                    "Please check your GitHub token in the extension settings."
+                )
+                return body, [], [], is_outdated, auth_error
+
+            if isinstance(comment_result, GitHubError):
+                logger.warning(f'"action": "enrich_context_failed", "error": "{comment_result}"')
+            else:
+                comment   = comment_result
+                diff_hunk = comment.diff_hunk
+                file_path = comment.file_path
+                commit_id = comment.commit_id
+
+                # Detect outdated comment
+                if not isinstance(head_result, Exception):
+                    is_outdated = (commit_id != head_result)
+
+                file_content = await get_file_content(
+                    body.repo, comment.file_path, commit_id, body.github_token
+                )
+
+        except Exception as e:
             logger.warning(f'"action": "enrich_context_failed", "error": "{e}"')
 
     # 2. Fetch all PR changed files (for related-diff section)
@@ -156,7 +190,7 @@ async def _fetch_full_context(body: AnalyzeRequest):
         "file_path":    file_path,
         "file_content": file_content,
     })
-    return enriched, pr_files, import_deps
+    return enriched, pr_files, import_deps, is_outdated, auth_error
 
 
 async def _fetch_chat_context(
@@ -180,7 +214,14 @@ async def _fetch_chat_context(
 async def analyze(body: AnalyzeRequest):
     logger.info(f'"action": "analyze", "repo": "{body.repo}", "comment": "{body.comment_id}"')
 
-    body, pr_files, import_deps = await _fetch_full_context(body)
+    body, pr_files, import_deps, is_outdated, auth_error = await _fetch_full_context(body)
+
+    if auth_error:
+        return StreamingResponse(
+            _error_event_stream(auth_error),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     messages = build_analyze_messages(
         comment_body=body.comment_body,
@@ -190,6 +231,7 @@ async def analyze(body: AnalyzeRequest):
         repo=body.repo,
         pr_files=pr_files,
         import_deps=import_deps,
+        is_outdated=is_outdated,
     )
     return StreamingResponse(
         stream_response(SYSTEM_PROMPT, messages, body.anthropic_key),

@@ -223,17 +223,98 @@ Fetching comment data from GitHub...
 ---
 
 ## Milestone 7 — Panel UI (Option B)
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-20
+
+### Steps
+1. Reload extension, navigate to a GitHub PR where you are the author
+2. Click `✦ Get AI Help` on any review comment
+3. Verify panel slides in from the right with dark purple styling
+4. Verify streaming response renders with markdown (bold, italic, inline code, lists)
+5. Verify follow-up input bar appears after analysis completes
+6. Verify closing the panel and reopening restores the prior conversation
+
+### Result
+- Panel slides in/out with animation ✓
+- Option B styling: dark purple/black, gradient header, AI orb ✓
+- Token streaming renders in real time ✓
+- Markdown (headers, bold, italic, code, lists, ✓/✗ items) renders correctly ✓
+- Follow-up input visible after first response ✓
+- "Continue conversation" banner shown on re-open ✓
+- "Start fresh" button clears history and re-analyzes ✓
+
+### Notes
+- Initial analysis sent empty `diff_hunk`, `file_path`, `file_content` — context enrichment deferred to M8
+- Model asked user to clarify which function was changed — expected for M7, addressed in M8
 
 ---
 
 ## Milestone 8 — End-to-End Flow + Persistence
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-20
+
+### Steps
+1. Clear storage: `rm -rf ~/.gh-ai-assistant/`
+2. Clear localStorage in browser console: `Object.keys(localStorage).filter(k => k.startsWith("gh-ai:")).forEach(k => localStorage.removeItem(k))`
+3. Reload extension + refresh PR page
+4. Click `✦ Get AI Help` — verify indexing progress shown, then analysis streams
+5. Close panel, reopen same comment — verify conversation restored
+6. Click "Start fresh" — verify re-analysis triggered
+7. Send a follow-up message — verify chat works
+
+### Result
+- First click triggers indexing; progress % shown in panel ✓
+- Analysis streams after indexing completes ✓
+- Conversation persists across panel close/open ✓
+- "Continue conversation" banner shown on restore ✓
+- Follow-up chat working ✓
+
+### Notes
+- Backend returned `422 Unprocessable Entity` on first test — old backend still running with required context fields; fixed by restarting backend to load updated optional-field `AnalyzeRequest`
+- Context fields (`diff_hunk`, `file_path`, `file_content`) now auto-fetched by backend via `_enrich_context`
+- Two observed post-M8 issues documented in `ISSUE_context_quality.md`: (1) model cited wrong function, (2) follow-up chat lost all code context — addressed in M8.5
+
+---
+
+## Milestone 8.5 — Context Quality
+**Status:** PASSED
+**Date:** 2026-04-21
+
+### Changes shipped
+- Prompt reordered: diff hunk now appears before full file content (higher attention weight)
+- RAG query enriched with first 300 chars of diff hunk (better chunk relevance)
+- Related PR diff (same-directory files) included with 2,000-token cap
+- Shallow import tracing: up to 3 local dependencies fetched and included
+- AI-generated codebase summary generated at index time via Claude; injected as `CODEBASE OVERVIEW` section
+- Chat context pinned: `diff_hunk`, `file_path`, `file_content` re-fetched and prepended on every `/chat` turn
+- `anthropic_key` forwarded to `/index` so summary generation works on first index
+
+### Notes
+- Fixed `Uncaught TypeError: Cannot read properties of null (reading 'classList')` — `closePanel()` called by nav observer before panel was created; fixed with null guard
+- Fixed duplicate analysis blocks — GitHub SPA navigation caused `init()` to run multiple times, registering multiple `gh-ai:open` listeners; fixed with `panelListenerActive` flag
 
 ---
 
 ## Milestone 9 — Error Handling + Corner Cases
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-21
+
+### Corner cases implemented
+
+| CC | Description | Implementation |
+|---|---|---|
+| 7.1 | Non-PR-author | Buttons not injected (M6) |
+| 7.2 | Repo not indexed | Indexing state shown, polls `/index/status` (M8) |
+| 7.3 | Large repo (>5 min) | `pollUntilIndexed` 5-min deadline; falls back to no-RAG analysis (M8) |
+| 7.4 | Missing GitHub token | Specific panel error with instruction to open settings |
+| 7.5 | Missing Anthropic key | Specific panel error with instruction to open settings |
+| 7.6 | Invalid/rate-limited key | `claude_client.py` maps errors to `invalid_key` / `rate_limit` messages; GitHub 401 now surfaces as SSE error event instead of silent fallback |
+| 7.7 | Backend offline | Button disabled with tooltip (M6) |
+| 7.9 | Long conversation | `_truncate_history`: always keeps first assistant message + fills 1,500-token budget newest-first |
+| 7.10 | Large PR diff | Only comment's diff hunk used; same-dir PR files capped at 2,000 tokens (M8.5) |
+| 7.11 | Outdated comment | `get_pr_comment` + `get_pr_head_ref` run in parallel; `commit_id != head_sha` → annotates diff hunk section in prompt |
+| 7.12 | Navigation mid-analysis | `abortCurrentStream()` called by nav observer (M8) |
+| 7.13 | Multiple comment clicks | Single panel; `abortCurrentStream()` on each `openPanel` call (M7) |
 
 ---
 
