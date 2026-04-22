@@ -10,8 +10,6 @@ A Chrome extension + local backend that injects an AI help button next to GitHub
 
 (Diagram to be updated)
 
-![Architecture diagram](architecture.png)
-
 ---
 
 ## How it works
