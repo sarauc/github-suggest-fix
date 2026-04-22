@@ -257,6 +257,37 @@
   line-height: 1.5;
 }
 
+/* ── Continue banner + start fresh ──────────────────────── */
+
+.gh-ai-continue-banner {
+  font-size: 11px;
+  color: #6e6a8a;
+  text-align: center;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid #2d2640;
+  margin-bottom: 4px;
+}
+
+.gh-ai-start-fresh {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 7px;
+  background: none;
+  border: 1px solid #2d2640;
+  border-radius: 6px;
+  color: #6e6a8a;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+  font-family: inherit;
+}
+.gh-ai-start-fresh:hover {
+  border-color: #7c3aed;
+  color: #a78bfa;
+}
+
 /* ── Input row ───────────────────────────────────────────── */
 
 .gh-ai-input-row {

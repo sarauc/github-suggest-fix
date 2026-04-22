@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from typing import Dict, List
 
 import config
-from services.github_client import GitHubError, get_file_blob, get_repo_tree
+from services.github_client import GitHubError, get_file_blob, get_file_content, get_repo_tree
+from services.repo_summary import generate_summary, save_summary
 from services.vector_store import Chunk, upsert_chunks
 
 logger = logging.getLogger(__name__)
@@ -120,7 +121,7 @@ def _chunk_text(file_path: str, content: str) -> List[Chunk]:
 
 # ── Main indexing pipeline ────────────────────────────────────────
 
-async def index_repo(repo: str, token: str) -> None:
+async def index_repo(repo: str, token: str, anthropic_key: str = "") -> None:
     """Full indexing pipeline. Runs as a background task."""
     logger.info(f'"action": "index_start", "repo": "{repo}"')
     _index_state[repo] = {"status": "indexing", "progress": 0.0}
@@ -177,8 +178,18 @@ async def index_repo(repo: str, token: str) -> None:
             # Small yield to keep the event loop responsive
             await asyncio.sleep(0)
 
-        # 4. Upsert all chunks to ChromaDB (embedding happens here via ChromaDB's default embedding fn)
+        # 4. Upsert all chunks
         upsert_chunks(repo, all_chunks)
+
+        # 5. Generate AI codebase summary (if API key provided)
+        if anthropic_key:
+            try:
+                tree_paths = [e.path for e in files_to_index]
+                readme = await _fetch_readme(repo, head_ref, token)
+                summary = await generate_summary(repo, tree_paths, readme, anthropic_key)
+                save_summary(repo, summary)
+            except Exception as e:
+                logger.warning(f'"action": "summary_failed", "repo": "{repo}", "error": "{e}"')
 
         duration = round(time.monotonic() - start_time, 1)
         _index_state[repo] = {
@@ -197,6 +208,16 @@ async def index_repo(repo: str, token: str) -> None:
         logger.error(f'"action": "index_error", "repo": "{repo}", "error": "{e}"')
         _index_state[repo] = {"status": "error", "progress": 0.0, "error": str(e)}
         _save_state()
+
+
+async def _fetch_readme(repo: str, ref: str, token: str) -> str:
+    """Try to fetch README.md content; return empty string if not found."""
+    for candidate in ("README.md", "readme.md", "README.rst", "README"):
+        try:
+            return await get_file_content(repo, candidate, ref, token)
+        except GitHubError:
+            continue
+    return ""
 
 
 async def _get_default_branch_sha(repo: str, token: str) -> str:

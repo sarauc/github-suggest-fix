@@ -2,9 +2,11 @@
 Assembles the prompt context sent to Claude for /analyze and /chat.
 """
 
-from typing import List, Optional
+import os
+from typing import List, Optional, Tuple
 
 import config
+from services.repo_summary import load_summary
 from services.vector_store import query_relevant_chunks
 
 # ── System prompt ─────────────────────────────────────────────────
@@ -58,11 +60,9 @@ def _truncate_history(history: List[dict], max_tokens: int) -> List[dict]:
     if not history:
         return []
 
-    # Always keep the first assistant message (original analysis)
     kept = [history[0]]
     budget = max_tokens - _estimate_tokens(history[0].get("content", ""))
 
-    # Add recent messages in reverse until budget runs out
     for msg in reversed(history[1:]):
         tokens = _estimate_tokens(msg.get("content", ""))
         if budget - tokens < 0:
@@ -73,6 +73,18 @@ def _truncate_history(history: List[dict], max_tokens: int) -> List[dict]:
     return kept
 
 
+# ── Related PR diff filtering ─────────────────────────────────────
+
+def _filter_related_pr_files(pr_files: List[dict], commented_file_path: str) -> List[dict]:
+    """Return PR files in the same directory as the commented file (excluding the file itself)."""
+    commented_dir = os.path.dirname(commented_file_path)
+    return [
+        f for f in pr_files
+        if os.path.dirname(f["filename"]) == commented_dir
+        and f["filename"] != commented_file_path
+    ]
+
+
 # ── Context builders ──────────────────────────────────────────────
 
 def build_analyze_messages(
@@ -81,43 +93,115 @@ def build_analyze_messages(
     file_path: str,
     file_content: str,
     repo: str,
+    pr_files: Optional[List[dict]] = None,
+    import_deps: Optional[List[Tuple[str, str]]] = None,
 ) -> List[dict]:
-    """Build the messages list for the first-turn /analyze call."""
+    """Build the messages list for the first-turn /analyze call.
 
-    # Truncate file content to budget
-    file_truncated = _truncate_to_tokens(file_content, config.MAX_FILE_TOKENS)
+    pr_files: list of {"filename": str, "patch": str} for all PR changed files.
+    import_deps: list of (file_path, file_content) for resolved local imports.
+    """
 
-    # RAG: query with comment + file path as context signal
-    rag_query = f"{comment_body} {file_path}"
+    sections = []
+
+    # ── 1. Review comment (primary goal — placed first) ───────────
+    sections.append(f"--- REVIEW COMMENT ---\n{comment_body}")
+
+    # ── 2. Diff hunk (pinpoint target — placed second, high attention weight)
+    if diff_hunk:
+        sections.append(
+            f"--- CHANGED LINES (the exact code the reviewer is commenting on) ---\n{diff_hunk}"
+        )
+
+    # ── 3. Full file content ──────────────────────────────────────
+    if file_content:
+        file_truncated = _truncate_to_tokens(file_content, config.MAX_FILE_TOKENS)
+        sections.append(f"--- FULL FILE: {file_path} ---\n{file_truncated}")
+
+    # ── 4. Related PR diff (same-directory files) ─────────────────
+    if pr_files and file_path:
+        related = _filter_related_pr_files(pr_files, file_path)
+        if related:
+            parts = []
+            budget = 2000  # token cap for entire section
+            for f in related:
+                patch_truncated = _truncate_to_tokens(f["patch"], min(budget, 600))
+                token_cost = _estimate_tokens(patch_truncated)
+                if budget - token_cost < 0:
+                    break
+                parts.append(f"// {f['filename']}\n{patch_truncated}")
+                budget -= token_cost
+            if parts:
+                sections.append(
+                    "--- RELATED PR CHANGES (other files changed in this PR, same directory) ---\n"
+                    + "\n\n".join(parts)
+                )
+
+    # ── 5. Shallow import dependencies ────────────────────────────
+    if import_deps:
+        parts = []
+        for dep_path, dep_content in import_deps:
+            dep_truncated = _truncate_to_tokens(dep_content, 400)
+            parts.append(f"// {dep_path}\n{dep_truncated}")
+        if parts:
+            sections.append(
+                "--- IMPORTED DEPENDENCIES (local files imported by the commented file) ---\n"
+                + "\n\n".join(parts)
+            )
+
+    # ── 6. RAG chunks (query now includes diff hunk tokens) ───────
+    rag_query = f"{comment_body} {diff_hunk[:300]} {file_path}"
     rag_chunks = query_relevant_chunks(repo, rag_query, top_k=config.RAG_TOP_K)
-
-    rag_section = ""
     if rag_chunks:
         parts = []
         for chunk in rag_chunks:
             parts.append(
                 f"// {chunk.file_path} (lines {chunk.start_line}–{chunk.end_line})\n{chunk.text}"
             )
-        rag_section = "\n\n--- RELATED CODEBASE CONTEXT ---\n" + "\n\n".join(parts)
+        sections.append("--- RELATED CODEBASE CONTEXT ---\n" + "\n\n".join(parts))
 
-    user_message = f"""--- REVIEW COMMENT ---
-{comment_body}
+    # ── 7. Codebase overview (AI-generated summary from index time)
+    summary = load_summary(repo)
+    if summary:
+        summary_truncated = _truncate_to_tokens(summary, 300)
+        sections.append(f"--- CODEBASE OVERVIEW ---\n{summary_truncated}")
 
---- FILE: {file_path} ---
-{file_truncated}
-
---- DIFF HUNK ---
-{diff_hunk}{rag_section}"""
-
+    user_message = "\n\n".join(sections)
     return [{"role": "user", "content": user_message}]
 
 
 def build_chat_messages(
     conversation_history: List[dict],
     user_message: str,
+    comment_body: str = "",
+    diff_hunk: str = "",
+    file_path: str = "",
+    file_content: str = "",
 ) -> List[dict]:
-    """Build the messages list for a follow-up /chat turn."""
-    truncated_history = _truncate_history(
-        conversation_history, max_tokens=2000
-    )
-    return truncated_history + [{"role": "user", "content": user_message}]
+    """Build the messages list for a follow-up /chat turn.
+
+    When comment_body / diff_hunk / file_content are provided, a compact
+    pinned context block is prepended so Claude retains code awareness
+    across all follow-up turns.
+    """
+    messages = []
+
+    # Pinned context block — re-injected on every chat turn
+    if diff_hunk or file_path:
+        file_snippet = _truncate_to_tokens(file_content, 800) if file_content else ""
+        pinned_parts = ["[Original context — reference this throughout the conversation]"]
+        if comment_body:
+            pinned_parts.append(f"Review comment: {comment_body}")
+        if file_path:
+            pinned_parts.append(f"File: {file_path}")
+        if diff_hunk:
+            pinned_parts.append(f"Changed lines:\n{diff_hunk}")
+        if file_snippet:
+            pinned_parts.append(f"File excerpt:\n{file_snippet}")
+        pinned_parts.append("---")
+        messages.append({"role": "user", "content": "\n".join(pinned_parts)})
+
+    history = _truncate_history(conversation_history, max_tokens=1500)
+    messages.extend(history)
+    messages.append({"role": "user", "content": user_message})
+    return messages

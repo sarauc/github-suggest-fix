@@ -14,6 +14,7 @@ class IndexRequest(BaseModel):
     repo: str         # "owner/repo"
     github_token: str
     force: bool = False   # re-index even if already indexed
+    anthropic_key: str = ""   # used to generate AI codebase summary after indexing
 
 
 @router.post("/index")
@@ -26,7 +27,7 @@ async def start_index(body: IndexRequest, background_tasks: BackgroundTasks):
     if is_indexed(body.repo) and not body.force:
         return {"status": "indexed", "message": "Already indexed. Pass force=true to re-index."}
 
-    background_tasks.add_task(index_repo, body.repo, body.github_token)
+    background_tasks.add_task(index_repo, body.repo, body.github_token, body.anthropic_key)
     logger.info(f'"action": "index_triggered", "repo": "{body.repo}"')
     return {"status": "indexing", "message": "Indexing started"}
 

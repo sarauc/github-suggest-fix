@@ -52,6 +52,12 @@ class TreeEntry:
     entry_type: str       # "blob" | "tree"
 
 
+@dataclass
+class PRFile:
+    filename: str
+    patch: str            # unified diff patch; empty for binary files
+
+
 # ── Client ────────────────────────────────────────────────────────
 
 def _headers(token: str) -> dict:
@@ -180,6 +186,28 @@ async def get_file_blob(repo: str, blob_sha: str, token: str) -> str:
         )
 
     return base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+
+
+async def get_pr_files(repo: str, pr_number: int, token: str) -> List[PRFile]:
+    """Fetch the list of files changed in a pull request, with their patches.
+
+    Returns only files that have a non-empty patch (skips binary files).
+    Fetches up to 100 files (first page only — sufficient for MVP).
+    """
+    url = f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}/files"
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(url, headers=_headers(token), params={"per_page": 100})
+
+    _raise_for_status(response, f"get_pr_files PR#{pr_number}")
+    data = response.json()
+
+    files = [
+        PRFile(filename=f["filename"], patch=f.get("patch", ""))
+        for f in data
+        if f.get("patch")
+    ]
+    logger.info(f'"action": "get_pr_files", "repo": "{repo}", "pr": {pr_number}, "files": {len(files)}')
+    return files
 
 
 async def get_pr_head_ref(repo: str, pr_number: int, token: str) -> str:

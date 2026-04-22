@@ -569,6 +569,163 @@ Milestones are ordered by dependency. Each milestone should be independently tes
 
 ---
 
+### Milestone 8.5 — Context Quality
+**Goal:** Give Claude the right context, in the right order, with enough codebase awareness to cite the correct code on the first try and maintain that awareness across follow-up turns.
+
+This milestone addresses two observed failures after M8:
+1. Model cited the wrong function on first turn
+2. Model lost all code context in follow-up chat
+
+#### 8.5.1 — Reorder prompt: diff hunk first
+
+**File:** `backend/services/context_assembler.py` → `build_analyze_messages()`
+
+Restructure the user message so the pinpoint signal comes before the broad context:
+
+```
+--- REVIEW COMMENT ---
+{comment_body}
+
+--- CHANGED LINES (the code the reviewer is commenting on) ---
+{diff_hunk}
+
+--- FULL FILE: {file_path} ---
+{file_content}
+
+--- RELATED PR CHANGES ---
+{related_pr_diff_hunks}
+
+--- RELATED CODEBASE CONTEXT ---
+{rag_chunks}
+
+--- CODEBASE OVERVIEW ---
+{codebase_summary}
+```
+
+#### 8.5.2 — Related PR diff (files in the same directory)
+
+**New GitHub API method:** `github_client.py` → `get_pr_files(repo, pr_number, token)`
+
+Calls `GET /repos/{repo}/pulls/{pr_number}/files` which returns the list of all files changed in the PR, each with its patch (unified diff).
+
+**Filtering logic** (`context_assembler.py`): from the returned file list, include patches only for files that share the same **directory** as the commented file (i.e. `os.path.dirname(commented_file_path) == os.path.dirname(changed_file_path)`). This gives the model a picture of what else changed nearby without pulling in unrelated hunks from across the repo.
+
+**Token cap:** 2,000 tokens total for the related PR diff section, truncated from the bottom if exceeded.
+
+`routes/analyze.py` passes `pr_number` and `github_token` into `build_analyze_messages()` so it can call `get_pr_files()`.
+
+#### 8.5.3 — Improved RAG query: include diff hunk tokens
+
+**File:** `backend/services/context_assembler.py` → `build_analyze_messages()`
+
+Change:
+```python
+# Before
+rag_query = f"{comment_body} {file_path}"
+
+# After
+rag_query = f"{comment_body} {diff_hunk[:300]} {file_path}"
+```
+
+Including the first 300 characters of the diff hunk in the BM25 query biases retrieval toward chunks that share vocabulary with the *actual changed lines*, not just the comment text.
+
+#### 8.5.4 — AI-generated codebase summary
+
+**New file:** `backend/services/repo_summary.py`
+
+At the end of the indexing pipeline (after `upsert_chunks`), make a single Claude call to generate a concise codebase summary:
+
+- Input: repo tree paths (directory structure) + `README.md` content (if present, up to 4,000 tokens)
+- Prompt: ask Claude to produce a 150–200 word summary covering: what the project does, primary language/framework, key directories and their roles, notable conventions
+- Output: stored as plaintext at `~/.gh-ai-assistant/summaries/<owner>__<repo>.txt`
+
+**Injection:** `build_analyze_messages()` loads the summary (if it exists) and appends it as a `--- CODEBASE OVERVIEW ---` section at the end of the user message. Cap at 300 tokens.
+
+**Files changed:**
+- `backend/services/repo_summary.py` — new file: `generate_summary(repo, tree_paths, readme, anthropic_key)`, `load_summary(repo)`, `save_summary(repo, text)`
+- `backend/services/indexer.py` — call `generate_summary()` after `upsert_chunks()`; requires `anthropic_key` to be passed into `index_repo()`
+- `backend/routes/index.py` — `IndexRequest` gains `anthropic_key` field; forwarded to `index_repo()`
+- `extension/content.js` — include `anthropic_key` in the `/index` POST body (already available from `chrome.storage.sync`)
+
+#### 8.5.5 — Shallow import tracing
+
+**File:** `backend/services/context_assembler.py` → new helper `_resolve_imports(file_content, file_path, repo, token)`
+
+After fetching the commented file's content, parse its import statements to identify local dependencies (1 level deep):
+
+- **Python:** match `from .module import ...` and `from package.module import ...` lines; resolve relative to the file's directory
+- **JS/TS:** match `import ... from './path'` and `require('./path')` lines
+
+For each resolved local import path, call `get_file_content()` to fetch that file and include a truncated excerpt (up to 400 tokens per dependency, max 3 dependencies) as an additional section:
+
+```
+--- IMPORTED DEPENDENCY: {dep_file_path} ---
+{dep_content, truncated to 400 tokens}
+```
+
+Skip stdlib modules, third-party packages, and any path that doesn't resolve to a file in the repo. Failures are silent (log and skip).
+
+#### 8.5.6 — Pin code context into follow-up chat turns
+
+**File:** `backend/services/context_assembler.py` → `build_chat_messages()`
+**File:** `backend/routes/analyze.py` → `ChatRequest`
+
+`ChatRequest` gains optional fields:
+```python
+comment_body: str = ""
+diff_hunk:    str = ""
+file_path:    str = ""
+file_content: str = ""   # truncated to 800 tokens before storing
+```
+
+`build_chat_messages()` prepends a compact pinned context block as the first user message whenever these fields are present:
+
+```
+[Original context — reference this throughout the conversation]
+Review comment: {comment_body}
+File: {file_path}
+Changed lines:
+{diff_hunk}
+Relevant file excerpt:
+{file_content, truncated to 800 tokens}
+---
+```
+
+`extension/content.js`: on first analysis start, save `{comment_body, diff_hunk, file_path}` to `localStorage` under key `gh-ai:{repo}:{pr}:{commentId}:ctx`. On every `/chat` call, read this context block and include it in the request body.
+
+#### Updated token budget
+
+| Section | Max tokens |
+|---|---|
+| System prompt | 800 |
+| Review comment | 500 |
+| Diff hunk (primary target) | 1,000 |
+| Full file content | 6,000 |
+| Related PR diff | 2,000 |
+| Import dependencies (3 × 400) | 1,200 |
+| RAG chunks (5 × 400) | 2,000 |
+| Codebase summary | 300 |
+| Response budget | 1,500 |
+| **Total** | **~15,300** |
+
+Still well within `claude-sonnet-4-5`'s 200K context window.
+
+#### Files changed in M8.5
+
+| File | Change |
+|---|---|
+| `backend/services/context_assembler.py` | Reorder sections; add related PR diff, import deps, codebase summary, pinned chat context; improve RAG query |
+| `backend/services/github_client.py` | Add `get_pr_files(repo, pr_number, token)` |
+| `backend/services/repo_summary.py` | New — AI summary generation and persistence |
+| `backend/services/indexer.py` | Call `generate_summary()` after indexing; accept `anthropic_key` |
+| `backend/routes/analyze.py` | Pass `pr_number` + `github_token` into `build_analyze_messages()`; extend `ChatRequest` with context fields |
+| `backend/routes/index.py` | Add `anthropic_key` to `IndexRequest` |
+| `extension/content.js` | Save context block to localStorage; include in `/chat` and `/index` requests |
+
+- **Test:** On a real PR, verify: (a) first-turn response cites the function on the commented lines; (b) follow-up question about "which function" is answered without asking the user to clarify; (c) codebase summary appears in backend logs during indexing
+
+---
+
 ### Milestone 9 — Error Handling + Corner Cases
 **Goal:** All corner cases from PRD §7 are handled gracefully.
 

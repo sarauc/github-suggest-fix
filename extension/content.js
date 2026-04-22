@@ -6,12 +6,14 @@ const BACKEND_URL    = "http://127.0.0.1:8765";
 
 // ── State ─────────────────────────────────────────────────────────
 
-let backendAlive      = false;
-let currentUserLogin  = null;
-let prAuthorLogin     = null;
-let activeCommentId   = null;
+let backendAlive        = false;
+let currentUserLogin    = null;
+let prAuthorLogin       = null;
+let activeCommentId     = null;
+let activeCommentBody   = "";   // saved for chat context re-injection
 let conversationHistory = [];   // [{role, content}] for current comment
-let currentReader     = null;   // active SSE reader — aborted on panel close
+let currentReader       = null; // active SSE reader — aborted on panel close
+let panelListenerActive = false; // ensures gh-ai:open listener is registered only once
 
 // ── Initialise ────────────────────────────────────────────────────
 
@@ -38,7 +40,10 @@ async function init() {
     }
   });
 
-  document.addEventListener("gh-ai:open", (e) => openPanel(e.detail));
+  if (!panelListenerActive) {
+    document.addEventListener("gh-ai:open", (e) => openPanel(e.detail));
+    panelListenerActive = true;
+  }
 
   const observer = new MutationObserver(debounce(injectButtons, 300));
   observer.observe(document.body, { childList: true, subtree: true });
@@ -211,50 +216,158 @@ function createPanel() {
   });
 }
 
+// ── localStorage persistence ──────────────────────────────────────
+
+function storageKey(repo, prNumber, commentId) {
+  return `gh-ai:${repo}:${prNumber}:${commentId}`;
+}
+
+function saveConversation(repo, prNumber, commentId, history) {
+  if (!history.length) return;
+  try {
+    localStorage.setItem(storageKey(repo, prNumber, commentId), JSON.stringify(history));
+  } catch { /* storage full — silently skip */ }
+}
+
+function loadConversation(repo, prNumber, commentId) {
+  try {
+    const raw = localStorage.getItem(storageKey(repo, prNumber, commentId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+// ── Indexing flow ─────────────────────────────────────────────────
+
+async function ensureIndexed(repo, settings) {
+  // Check current index status
+  const res = await fetch(
+    `${settings.backendUrl}/index/status?repo=${encodeURIComponent(repo)}`
+  );
+  const status = await res.json();
+
+  if (status.status === "indexed") return true;
+  if (status.status === "indexing") {
+    showIndexingProgress(status.progress || 0);
+    return await pollUntilIndexed(repo, settings);
+  }
+
+  // Not indexed yet — trigger it
+  await fetch(`${settings.backendUrl}/index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repo,
+      github_token:  settings.githubToken,
+      anthropic_key: settings.anthropicKey,
+    }),
+  });
+
+  showIndexingProgress(0);
+  return await pollUntilIndexed(repo, settings);
+}
+
+async function pollUntilIndexed(repo, settings) {
+  const deadline = Date.now() + 5 * 60 * 1000; // 5 min timeout
+
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    const res = await fetch(
+      `${settings.backendUrl}/index/status?repo=${encodeURIComponent(repo)}`
+    );
+    const status = await res.json();
+    showIndexingProgress(status.progress || 0);
+
+    if (status.status === "indexed") return true;
+    if (status.status === "error") {
+      showIndexingProgress(null, status.error || "Indexing failed");
+      return false; // proceed without RAG
+    }
+  }
+
+  // Timeout — proceed without RAG (fallback)
+  showIndexingProgress(null, "Indexing timed out — analyzing without full codebase context");
+  return false;
+}
+
+function showIndexingProgress(progress, errorMsg) {
+  const loadingEl = document.getElementById("gh-ai-loading");
+  if (errorMsg) {
+    loadingEl.innerHTML = `<span style="color:#f85149;font-size:12px">${escapeHtml(errorMsg)}</span>`;
+    setTimeout(() => {
+      loadingEl.innerHTML = `<div class="gh-ai-spinner"></div><span>Analyzing comment…</span>`;
+    }, 3000);
+    return;
+  }
+  const pct = Math.round((progress || 0) * 100);
+  loadingEl.innerHTML = `
+    <div class="gh-ai-spinner"></div>
+    <span>Indexing repo… ${pct}%</span>
+  `;
+}
+
 // ── Panel open / close ────────────────────────────────────────────
 
 async function openPanel({ commentId, commentBody }) {
-  // Single-panel rule: abort any in-flight request
   abortCurrentStream();
 
-  activeCommentId      = commentId;
-  conversationHistory  = [];
+  const { repo, prNumber } = getPRInfo();
+  activeCommentId   = commentId;
+  activeCommentBody = commentBody;
 
   const panel = document.getElementById("gh-ai-panel");
   panel.classList.remove("gh-ai-panel-hidden");
   panel.classList.add("gh-ai-panel-visible");
 
-  // Update subtitle with comment snippet
   document.getElementById("gh-ai-subtitle").textContent =
     commentBody ? `"${commentBody.slice(0, 60)}…"` : `Comment #${commentId}`;
 
-  // Reset body
   document.getElementById("gh-ai-loading").style.display = "flex";
+  document.getElementById("gh-ai-loading").innerHTML =
+    `<div class="gh-ai-spinner"></div><span>Analyzing comment…</span>`;
   document.getElementById("gh-ai-messages").innerHTML = "";
   document.getElementById("gh-ai-input").value = "";
   document.getElementById("gh-ai-input-row").style.display = "none";
 
-  // Fetch settings then call /analyze
   const settings = await getSettings();
   if (!settings.anthropicKey || !settings.githubToken) {
     showError("Please add your Anthropic API key and GitHub token in the extension settings.");
     return;
   }
 
-  const { repo, prNumber } = getPRInfo();
+  // ── Restore prior conversation if exists ──────────────────────
+  const saved = loadConversation(repo, prNumber, commentId);
+  if (saved && saved.length > 0) {
+    conversationHistory = saved;
+    document.getElementById("gh-ai-loading").style.display = "none";
+    showRestoredConversation(saved);
+    document.getElementById("gh-ai-input-row").style.display = "flex";
+    document.getElementById("gh-ai-input").focus();
+    return;
+  }
 
-  await streamAnalyze({
-    repo,
-    prNumber,
-    commentId,
-    commentBody,
-    settings,
-  });
+  conversationHistory = [];
+
+  // ── Ensure repo is indexed (trigger if needed) ─────────────────
+  await ensureIndexed(repo, settings);
+
+  // Reset loading label before streaming
+  document.getElementById("gh-ai-loading").innerHTML =
+    `<div class="gh-ai-spinner"></div><span>Analyzing comment…</span>`;
+
+  await streamAnalyze({ repo, prNumber, commentId, commentBody, settings });
 }
 
 function closePanel() {
   abortCurrentStream();
+
+  // Persist conversation before closing
+  if (activeCommentId && conversationHistory.length) {
+    const { repo, prNumber } = getPRInfo();
+    saveConversation(repo, prNumber, activeCommentId, conversationHistory);
+  }
+
   const panel = document.getElementById("gh-ai-panel");
+  if (!panel) return;
   panel.classList.remove("gh-ai-panel-visible");
   panel.classList.add("gh-ai-panel-hidden");
   activeCommentId = null;
@@ -290,14 +403,12 @@ async function streamAnalyze({ repo, prNumber, commentId, commentBody, settings 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repo,
-        pr_number:    prNumber,
-        comment_id:   commentId,
-        comment_body: commentBody,
-        diff_hunk:    "",        // enriched in M8
-        file_path:    "",        // enriched in M8
-        file_content: "",        // enriched in M8
-        github_token: settings.githubToken,
+        pr_number:     prNumber,
+        comment_id:    commentId,
+        comment_body:  commentBody,
+        github_token:  settings.githubToken,
         anthropic_key: settings.anthropicKey,
+        // diff_hunk, file_path, file_content — fetched by backend automatically
       }),
     });
 
@@ -334,11 +445,13 @@ async function streamChat(userMessage, settings) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        repo:       getPRInfo().repo,
-        comment_id: activeCommentId,
-        user_message: userMessage,
+        repo:                 getPRInfo().repo,
+        comment_id:           activeCommentId,
+        user_message:         userMessage,
         conversation_history: conversationHistory,
-        anthropic_key: settings.anthropicKey,
+        anthropic_key:        settings.anthropicKey,
+        github_token:         settings.githubToken,
+        comment_body:         activeCommentBody,
       }),
     });
 
@@ -477,7 +590,54 @@ function showError(msg) {
   messages.innerHTML = `<div class="gh-ai-error">${escapeHtml(msg)}</div>`;
 }
 
+// ── Restored conversation ─────────────────────────────────────────
+
+function showRestoredConversation(history) {
+  const messages = document.getElementById("gh-ai-messages");
+  messages.innerHTML = "";
+
+  // "Continue conversation" banner
+  const banner = document.createElement("div");
+  banner.className = "gh-ai-continue-banner";
+  banner.textContent = "↩ Previous conversation restored";
+  messages.appendChild(banner);
+
+  for (const msg of history) {
+    const el = appendMessage(msg.role);
+    el.dataset.raw = msg.content;
+    el.innerHTML = msg.role === "assistant"
+      ? renderMarkdown(msg.content)
+      : escapeHtml(msg.content);
+  }
+
+  // Add "Start fresh" link
+  const fresh = document.createElement("button");
+  fresh.className = "gh-ai-start-fresh";
+  fresh.textContent = "Start fresh analysis";
+  fresh.addEventListener("click", async () => {
+    const { repo, prNumber } = getPRInfo();
+    localStorage.removeItem(storageKey(repo, prNumber, activeCommentId));
+    conversationHistory = [];
+    messages.innerHTML = "";
+    document.getElementById("gh-ai-loading").style.display = "flex";
+    document.getElementById("gh-ai-input-row").style.display = "none";
+    const settings = await getSettings();
+    await streamAnalyze({
+      repo, prNumber,
+      commentId: activeCommentId,
+      commentBody: "",
+      settings,
+    });
+  });
+  messages.appendChild(fresh);
+
+  // Scroll to bottom
+  document.getElementById("gh-ai-body").scrollTop = 9999;
+}
+
 // ── Utilities ─────────────────────────────────────────────────────
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function debounce(fn, ms) {
   let timer;
