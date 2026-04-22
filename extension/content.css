@@ -121,11 +121,12 @@
   text-overflow: ellipsis;
 }
 
+.gh-ai-panel-clear,
 .gh-ai-panel-close {
   background: none;
   border: none;
   color: #4a4560;
-  font-size: 20px;
+  font-size: 16px;
   cursor: pointer;
   line-height: 1;
   padding: 2px 4px;
@@ -133,7 +134,10 @@
   flex-shrink: 0;
   transition: color 0.15s;
 }
+.gh-ai-panel-close { font-size: 20px; }
+.gh-ai-panel-clear:hover,
 .gh-ai-panel-close:hover { color: #c8c4e0; }
+.gh-ai-panel-clear[hidden] { display: none; }
 
 /* ── Body ────────────────────────────────────────────────── */
 

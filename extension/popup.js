@@ -72,3 +72,66 @@ saveBtn.addEventListener("click", () => {
     errorMsg.hidden = true;
   });
 });
+
+// ── Re-index current repo ─────────────────────────────
+
+const reindexBtn    = $("reindexBtn");
+const reindexStatus = $("reindexStatus");
+
+function extractRepo(url) {
+  const m = url.match(/github\.com\/([^/]+\/[^/]+)\/pull\//);
+  return m ? m[1] : null;
+}
+
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  const repo = extractRepo(tabs[0]?.url || "");
+  if (repo) {
+    reindexBtn.textContent = `Re-index ${repo}`;
+    reindexBtn.dataset.repo = repo;
+    reindexBtn.hidden = false;
+  }
+});
+
+reindexBtn.addEventListener("click", async () => {
+  const repo = reindexBtn.dataset.repo;
+  if (!repo) return;
+
+  const data = await new Promise((resolve) =>
+    chrome.storage.sync.get(["githubToken", "anthropicKey", "backendUrl"], resolve)
+  );
+
+  if (!data.githubToken || !data.anthropicKey) {
+    reindexStatus.textContent = "Save your API keys first.";
+    reindexStatus.className = "reindex-status error";
+    reindexStatus.hidden = false;
+    return;
+  }
+
+  const backendUrl = data.backendUrl || "http://127.0.0.1:8765";
+  reindexBtn.disabled = true;
+  reindexStatus.textContent = "Starting re-index…";
+  reindexStatus.className = "reindex-status";
+  reindexStatus.hidden = false;
+
+  try {
+    const res = await fetch(`${backendUrl}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo,
+        github_token:  data.githubToken,
+        anthropic_key: data.anthropicKey,
+        force: true,
+      }),
+    });
+    const json = await res.json();
+    reindexStatus.textContent = json.status === "indexing"
+      ? "Indexing started — check back in a minute."
+      : (json.message || "Done.");
+  } catch {
+    reindexStatus.textContent = "Could not reach backend.";
+    reindexStatus.className = "reindex-status error";
+  } finally {
+    reindexBtn.disabled = false;
+  }
+});

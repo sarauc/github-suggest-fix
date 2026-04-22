@@ -744,7 +744,7 @@ Still well within `claude-sonnet-4-5`'s 200K context window.
 ### Milestone 10 — Polish + README
 **Goal:** Someone else can clone the repo and run it in 5 minutes.
 
-- [ ] `README.md`: setup steps (backend deps, Chrome unpacked extension install, API keys)
+- [ ] `README.md`: write a concise introduction to the prototype, generate nice architecture diagram (potentially could use excalidraw skill as appropriate), setup steps (backend deps, Chrome unpacked extension install, API keys), visual demo
 - [ ] `start.sh`: checks Python version, installs deps if needed, starts server
 - [ ] Extension icon assets (16, 48, 128px)
 - [ ] Manual re-index button in popup actually works

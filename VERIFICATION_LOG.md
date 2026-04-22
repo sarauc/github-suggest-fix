@@ -319,4 +319,16 @@ Fetching comment data from GitHub...
 ---
 
 ## Milestone 10 — Polish + README
-**Status:** PENDING
+**Status:** PASSED
+**Date:** 2026-04-21
+
+### Deliverables
+
+| Item | Status | Notes |
+|---|---|---|
+| `README.md` | Done | Intro, architecture diagram, setup steps, storage reference, project structure |
+| `start.sh` | Already done | Python 3.8+ check, venv creation, dep install, server start |
+| Icon assets (16/48/128px) | Already done | Files present in `extension/icons/` |
+| Manual re-index button | Done | Popup detects current GitHub PR repo from active tab URL; calls `/index` with `force: true`; shows status |
+| Clear conversation button | Done | ⟳ button in panel header; clears localStorage + resets state + re-shows loading spinner |
+| Log file rotation | Already done | `RotatingFileHandler` at 10 MB, 2 backups in `main.py` |

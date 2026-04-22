@@ -181,6 +181,7 @@ function createPanel() {
           <div class="gh-ai-panel-title">AI Code Reviewer</div>
           <div class="gh-ai-panel-subtitle" id="gh-ai-subtitle"></div>
         </div>
+        <button class="gh-ai-panel-clear" id="gh-ai-clear" title="Clear conversation">⟳</button>
         <button class="gh-ai-panel-close" id="gh-ai-close" title="Close">×</button>
       </div>
 
@@ -208,6 +209,7 @@ function createPanel() {
   document.body.appendChild(panel);
 
   document.getElementById("gh-ai-close").addEventListener("click", closePanel);
+  document.getElementById("gh-ai-clear").addEventListener("click", clearConversation);
 
   const input = document.getElementById("gh-ai-input");
   document.getElementById("gh-ai-send").addEventListener("click", () => sendFollowUp());
@@ -375,6 +377,23 @@ function closePanel() {
   panel.classList.remove("gh-ai-panel-visible");
   panel.classList.add("gh-ai-panel-hidden");
   activeCommentId = null;
+}
+
+function clearConversation() {
+  if (!activeCommentId) return;
+  abortCurrentStream();
+
+  const { repo, prNumber } = getPRInfo();
+  localStorage.removeItem(storageKey(repo, prNumber, activeCommentId));
+  conversationHistory = [];
+  activeCommentBody   = "";
+
+  document.getElementById("gh-ai-messages").innerHTML   = "";
+  document.getElementById("gh-ai-input").value          = "";
+  document.getElementById("gh-ai-input-row").style.display = "none";
+  document.getElementById("gh-ai-loading").style.display  = "flex";
+  document.getElementById("gh-ai-loading").innerHTML =
+    `<div class="gh-ai-spinner"></div><span>Analyzing comment…</span>`;
 }
 
 function abortCurrentStream() {
