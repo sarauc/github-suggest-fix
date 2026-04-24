@@ -8,7 +8,9 @@ A Chrome extension + local backend that injects an AI help button next to GitHub
 
 ## Architecture
 
-(Diagram to be updated)
+[![Architecture diagram](architecture-diagram.svg)](architecture-diagram.html)
+
+> Click the diagram to open the full interactive version.
 
 ---
 

@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PR Review AI Assistant – Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #22d3ee; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1000px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan   { background: #22d3ee; }
+    .card-dot.emerald{ background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber  { background: #fbbf24; }
+    .card-dot.slate  { background: #94a3b8; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>PR Review AI Assistant — Architecture</h1>
+    </div>
+    <p class="subtitle">Chrome Extension · FastAPI :8765 · BM25 RAG · claude-sonnet-4-5 · SSE Streaming</p>
+  </div>
+
+  <!-- Main Diagram -->
+  <div class="diagram-container">
+    <svg viewBox="0 0 1100 660">
+      <defs>
+        <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <marker id="arr-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+        </marker>
+        <marker id="arr-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+        </marker>
+        <marker id="arr-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+        </marker>
+        <marker id="arr-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+        </marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+
+      <!-- Background -->
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ── Section boundaries ──────────────────────────────────────────── -->
+
+      <!-- BROWSER boundary (cyan dashed) -->
+      <rect x="15" y="28" width="250" height="502" rx="10"
+            fill="rgba(8,51,68,0.08)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,4"/>
+      <text x="22" y="22" fill="#22d3ee" font-size="10" font-family="JetBrains Mono" font-weight="600">BROWSER</text>
+
+      <!-- BACKEND boundary (emerald dashed) -->
+      <rect x="280" y="28" width="368" height="502" rx="10"
+            fill="rgba(6,78,59,0.06)" stroke="#34d399" stroke-width="1" stroke-dasharray="6,4"/>
+      <text x="287" y="22" fill="#34d399" font-size="10" font-family="JetBrains Mono" font-weight="600">LOCAL BACKEND  :8765</text>
+
+      <!-- EXTERNAL boundary (slate dashed) -->
+      <rect x="663" y="28" width="425" height="502" rx="10"
+            fill="rgba(30,41,59,0.06)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,4"/>
+      <text x="670" y="22" fill="#94a3b8" font-size="10" font-family="JetBrains Mono" font-weight="600">EXTERNAL SERVICES</text>
+
+      <!-- ══════════════════════════════════════════════════════════════════
+           ARROWS — drawn before components so they render behind boxes.
+           Each arrow touches the exact source and target component edge.
+
+           Component right/left edges used:
+             content.js      right  x=252   center-y=166
+             background.js   right  x=252   center-y=260
+             API Routes      left   x=294   center-y=144  bottom-y=244
+             GitHub Client   right  x=636   center-y=152
+             BM25 Indexer    bottom (546,260)
+             Claude Client   right  x=636   center-y=304
+             BM25 Index Store top   (546,350)
+             GitHub REST API left   x=672   y=152
+             Anthropic API   left   x=672   y=424
+           ══════════════════════════════════════════════════════════════════ -->
+
+      <!-- ① content.js → API Routes  (upper track) -->
+      <line x1="252" y1="158" x2="294" y2="136"
+            stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arr-cyan)"/>
+
+      <!-- ② API Routes → content.js  SSE stream (lower track, dashed emerald) -->
+      <line x1="294" y1="154" x2="252" y2="176"
+            stroke="#34d399" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-emerald)"/>
+
+      <!-- ③ background.js → API Routes  GET /health (dashed cyan) -->
+      <line x1="252" y1="255" x2="294" y2="226"
+            stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-cyan)"/>
+
+      <!-- ④ GitHub Client → GitHub REST API v3 -->
+      <line x1="636" y1="152" x2="672" y2="152"
+            stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- ⑤ Claude Client → Anthropic Claude API  (L-shaped path through gap) -->
+      <path d="M 636 304 L 655 304 L 655 424 L 672 424"
+            fill="none" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arr-amber)"/>
+
+      <!-- ⑥ BM25 Indexer → BM25 Index Store  (routed left of Claude Client) -->
+      <!-- Segment 1: left from BM25 Indexer bottom (y=260 is above Claude Client at y=272) -->
+      <!-- Segment 2: down at x=446, in the gap between API Routes (right=442) and Claude Client (left=456) -->
+      <!-- Segment 3: right into BM25 Index Store top -->
+      <path d="M 546 260 L 446 260 L 446 350"
+            fill="none" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arr-violet)"/>
+
+      <!-- ── BROWSER COMPONENTS ──────────────────────────────────────────── -->
+
+      <!-- GitHub PR Page -->
+      <rect x="28" y="44" width="224" height="52" rx="6" fill="#0f172a"/>
+      <rect x="28" y="44" width="224" height="52" rx="6"
+            fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="140" y="64" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">GitHub PR Page</text>
+      <text x="140" y="80" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">PR + Inline Review Comments</text>
+
+      <!-- content.js — right edge x=252, center-y=166 -->
+      <rect x="28" y="110" width="224" height="112" rx="6" fill="#0f172a"/>
+      <rect x="28" y="110" width="224" height="112" rx="6"
+            fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="140" y="130" fill="white" font-size="12" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">content.js</text>
+      <text x="140" y="149" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Injects ✦ Get AI Help button</text>
+      <text x="140" y="164" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Slide-in panel · SSE streaming</text>
+      <text x="140" y="179" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">MutationObserver · abortStream</text>
+      <text x="140" y="200" fill="#22d3ee" font-size="8"
+            font-family="JetBrains Mono" text-anchor="middle">MV3 Content Script</text>
+
+      <!-- background.js — right edge x=252, center-y=260 -->
+      <rect x="28" y="236" width="224" height="48" rx="6" fill="#0f172a"/>
+      <rect x="28" y="236" width="224" height="48" rx="6"
+            fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="140" y="256" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">background.js</text>
+      <text x="140" y="272" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Pings /health every 30s</text>
+
+      <!-- popup.html / popup.js -->
+      <rect x="28" y="298" width="224" height="62" rx="6" fill="#0f172a"/>
+      <rect x="28" y="298" width="224" height="62" rx="6"
+            fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="140" y="318" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">popup.html / popup.js</text>
+      <text x="140" y="335" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Anthropic key · GitHub PAT</text>
+      <text x="140" y="350" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Backend URL · Re-index button</text>
+
+      <!-- localStorage -->
+      <rect x="28" y="374" width="224" height="68" rx="6" fill="#0f172a"/>
+      <rect x="28" y="374" width="224" height="68" rx="6"
+            fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="140" y="394" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">localStorage</text>
+      <text x="140" y="411" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">gh-ai:{repo}:{pr}:{commentId}</text>
+      <text x="140" y="427" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Conversation history per comment</text>
+
+      <!-- chrome.storage.sync -->
+      <rect x="28" y="456" width="224" height="52" rx="6" fill="#0f172a"/>
+      <rect x="28" y="456" width="224" height="52" rx="6"
+            fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="140" y="476" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">chrome.storage.sync</text>
+      <text x="140" y="494" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">anthropicKey · githubToken · backendUrl</text>
+
+      <!-- ── BACKEND COMPONENTS ──────────────────────────────────────────── -->
+
+      <!-- API Routes — left edge x=294, center-y=144 -->
+      <rect x="294" y="44" width="148" height="200" rx="6" fill="#0f172a"/>
+      <rect x="294" y="44" width="148" height="200" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="368" y="64" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">API Routes</text>
+      <text x="303" y="84"  fill="#34d399" font-size="9" font-family="JetBrains Mono">● /analyze  POST</text>
+      <text x="313" y="99"  fill="#64748b" font-size="8" font-family="JetBrains Mono">→ SSE stream</text>
+      <text x="303" y="116" fill="#34d399" font-size="9" font-family="JetBrains Mono">● /chat  POST</text>
+      <text x="313" y="131" fill="#64748b" font-size="8" font-family="JetBrains Mono">→ SSE stream</text>
+      <text x="303" y="148" fill="#34d399" font-size="9" font-family="JetBrains Mono">● /index  POST</text>
+      <text x="313" y="163" fill="#64748b" font-size="8" font-family="JetBrains Mono">→ background job</text>
+      <text x="303" y="180" fill="#34d399" font-size="9" font-family="JetBrains Mono">● /index/status  GET</text>
+      <text x="303" y="197" fill="#34d399" font-size="9" font-family="JetBrains Mono">● /health  GET</text>
+      <text x="303" y="233" fill="#64748b" font-size="8" font-family="JetBrains Mono">FastAPI · CORS: github.com</text>
+
+      <!-- Context Assembler -->
+      <rect x="456" y="44" width="180" height="64" rx="6" fill="#0f172a"/>
+      <rect x="456" y="44" width="180" height="64" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="546" y="64" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">Context Assembler</text>
+      <text x="546" y="81" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">5-source prompt builder</text>
+      <text x="546" y="97" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">diff · file · RAG · deps · summary</text>
+
+      <!-- GitHub Client — right edge x=636, center-y=152 -->
+      <rect x="456" y="120" width="180" height="64" rx="6" fill="#0f172a"/>
+      <rect x="456" y="120" width="180" height="64" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="546" y="140" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">GitHub Client</text>
+      <text x="546" y="157" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">PR comment · PR files</text>
+      <text x="546" y="173" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">file content · repo tree</text>
+
+      <!-- BM25 Indexer — bottom center (546, 260) -->
+      <rect x="456" y="196" width="180" height="64" rx="6" fill="#0f172a"/>
+      <rect x="456" y="196" width="180" height="64" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="546" y="216" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">BM25 Indexer</text>
+      <text x="546" y="233" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Repo fetch · chunk pipeline</text>
+      <text x="546" y="249" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">400-token chunks · 50 overlap</text>
+
+      <!-- Claude Client — right edge x=636, center-y=304 -->
+      <rect x="456" y="272" width="180" height="64" rx="6" fill="#0f172a"/>
+      <rect x="456" y="272" width="180" height="64" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="546" y="292" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">Claude Client</text>
+      <text x="546" y="309" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Anthropic Python SDK</text>
+      <text x="546" y="325" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">SSE streaming wrapper</text>
+
+      <!-- BM25 Index Store — top center at (546, 350) -->
+      <rect x="294" y="350" width="342" height="110" rx="6" fill="#0a0f1e"/>
+      <rect x="294" y="350" width="342" height="110" rx="6"
+            fill="rgba(76,29,149,0.35)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="465" y="372" fill="#a78bfa" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">BM25 Index Store  ·  rank_bm25</text>
+      <text x="465" y="391" fill="#22c55e" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">~/.gh-ai-assistant/indexes/{owner}__{repo}.json</text>
+      <text x="465" y="407" fill="#22c55e" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">~/.gh-ai-assistant/summaries/  ·  AI codebase summary</text>
+      <text x="465" y="423" fill="#22c55e" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">~/.gh-ai-assistant/server.log  ·  index_state.json</text>
+      <text x="465" y="444" fill="#a78bfa" font-size="8"
+            font-family="JetBrains Mono" text-anchor="middle">BM25 keyword index · JSON persistence · rotating logs (10 MB)</text>
+
+      <!-- Repo Summary Generator — fixed: two short subtitle lines instead of one overflowing line -->
+      <rect x="294" y="474" width="342" height="52" rx="6" fill="#0f172a"/>
+      <rect x="294" y="474" width="342" height="52" rx="6"
+            fill="rgba(6,78,59,0.35)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="465" y="491" fill="white" font-size="11" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">Repo Summary Generator</text>
+      <text x="465" y="506" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Claude-generated at index time · ~150 words</text>
+      <text x="465" y="520" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Injected as context in every prompt</text>
+
+      <!-- ── EXTERNAL COMPONENTS ─────────────────────────────────────────── -->
+
+      <!-- GitHub REST API v3 — left edge x=672, center-y=173 -->
+      <rect x="672" y="44" width="408" height="258" rx="6" fill="#0f172a"/>
+      <rect x="672" y="44" width="408" height="258" rx="6"
+            fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="876" y="66" fill="white" font-size="12" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">GitHub REST API v3</text>
+      <text x="876" y="83" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">Authorization: token {github_token}</text>
+      <line x1="685" y1="92" x2="1067" y2="92" stroke="#1e293b" stroke-width="1"/>
+      <text x="683" y="109" fill="#64748b" font-size="9" font-family="JetBrains Mono">GET /repos/{repo}/pulls/{pr}/comments/{id}</text>
+      <text x="693" y="124" fill="#475569" font-size="8" font-family="JetBrains Mono">→ diff_hunk · file_path · commit_id</text>
+      <text x="683" y="141" fill="#64748b" font-size="9" font-family="JetBrains Mono">GET /repos/{repo}/pulls/{pr}/files</text>
+      <text x="693" y="156" fill="#475569" font-size="8" font-family="JetBrains Mono">→ changed files + patches</text>
+      <text x="683" y="173" fill="#64748b" font-size="9" font-family="JetBrains Mono">GET /repos/{repo}/git/trees/{sha}?recursive=1</text>
+      <text x="693" y="188" fill="#475569" font-size="8" font-family="JetBrains Mono">→ all file paths for indexing</text>
+      <text x="683" y="205" fill="#64748b" font-size="9" font-family="JetBrains Mono">GET /repos/{repo}/contents/{path}</text>
+      <text x="693" y="220" fill="#475569" font-size="8" font-family="JetBrains Mono">→ file content (base64-decoded)</text>
+      <text x="683" y="237" fill="#64748b" font-size="9" font-family="JetBrains Mono">GET /repos/{repo}/pulls/{pr}</text>
+      <text x="693" y="252" fill="#475569" font-size="8" font-family="JetBrains Mono">→ head SHA (outdated comment detection)</text>
+      <text x="876" y="290" fill="#94a3b8" font-size="8"
+            font-family="JetBrains Mono" text-anchor="middle">Errors: 401 → invalid_key · 403 → rate_limit · 404 → not_found</text>
+
+      <!-- Anthropic Claude API — left edge x=672, center-y=424 -->
+      <rect x="672" y="320" width="408" height="208" rx="6" fill="#0f172a"/>
+      <rect x="672" y="320" width="408" height="208" rx="6"
+            fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="876" y="342" fill="white" font-size="12" font-weight="600"
+            font-family="JetBrains Mono" text-anchor="middle">Anthropic Claude API</text>
+      <text x="876" y="359" fill="#94a3b8" font-size="9"
+            font-family="JetBrains Mono" text-anchor="middle">model: claude-sonnet-4-5 · x-api-key: {anthropic_key}</text>
+      <line x1="685" y1="368" x2="1067" y2="368" stroke="#451a03" stroke-width="1"/>
+      <text x="683" y="385" fill="#fbbf24" font-size="9" font-family="JetBrains Mono">POST /v1/messages  (stream: true)</text>
+      <text x="683" y="402" fill="#64748b" font-size="9" font-family="JetBrains Mono">SSE events: content_block_delta</text>
+      <text x="693" y="417" fill="#475569" font-size="8" font-family="JetBrains Mono">→ type: text_delta · delta.text: &lt;token&gt;</text>
+      <text x="683" y="434" fill="#64748b" font-size="9" font-family="JetBrains Mono">Context order (highest → lowest weight):</text>
+      <text x="693" y="449" fill="#475569" font-size="8" font-family="JetBrains Mono">diff hunk → full file → RAG chunks → codebase summary</text>
+      <text x="683" y="466" fill="#64748b" font-size="9" font-family="JetBrains Mono">Token budget: ~8 K file · ~1.5 K output · history truncation</text>
+      <text x="876" y="515" fill="#fbbf24" font-size="8"
+            font-family="JetBrains Mono" text-anchor="middle">Role: mentor · explains why · 2-4 approaches · honest tradeoffs</text>
+
+      <!-- ── NUMBERED BADGES on each arrow ──────────────────────────────── -->
+      <!-- Badge helper: dark circle + colored border + white number -->
+
+      <!-- ① between content.js and API Routes, upper track -->
+      <circle cx="264" cy="148" r="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.2"/>
+      <text x="264" y="152" fill="#22d3ee" font-size="7.5" font-weight="700"
+            font-family="JetBrains Mono" text-anchor="middle">1</text>
+
+      <!-- ② between API Routes and content.js, lower track -->
+      <circle cx="264" cy="170" r="6" fill="#0f172a" stroke="#34d399" stroke-width="1.2"/>
+      <text x="264" y="174" fill="#34d399" font-size="7.5" font-weight="700"
+            font-family="JetBrains Mono" text-anchor="middle">2</text>
+
+      <!-- ③ background.js → API Routes -->
+      <circle cx="270" cy="244" r="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.2"/>
+      <text x="270" y="248" fill="#22d3ee" font-size="7.5" font-weight="700"
+            font-family="JetBrains Mono" text-anchor="middle">3</text>
+
+      <!-- ④ GitHub Client → GitHub REST API -->
+      <circle cx="654" cy="143" r="6" fill="#0f172a" stroke="#94a3b8" stroke-width="1.2"/>
+      <text x="654" y="147" fill="#94a3b8" font-size="7.5" font-weight="700"
+            font-family="JetBrains Mono" text-anchor="middle">4</text>
+
+      <!-- ⑤ Claude Client → Anthropic  (on the vertical segment at x=655) -->
+      <circle cx="647" cy="364" r="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.2"/>
+      <text x="647" y="368" fill="#fbbf24" font-size="7.5" font-weight="700"
+            font-family="JetBrains Mono" text-anchor="middle">5</text>
+
+      <!-- ⑥ badge on the vertical segment at x=446 -->
+      <circle cx="436" cy="305" r="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.2"/>
+      <text x="436" y="309" fill="#a78bfa" font-size="7.5" font-weight="700"
+            font-family="JetBrains Mono" text-anchor="middle">6</text>
+
+      <!-- ── LEGEND — color types ────────────────────────────────────────── -->
+      <text x="20" y="548" fill="white" font-size="10" font-weight="600" font-family="JetBrains Mono">Component Types</text>
+      <rect x="20"  y="556" width="14" height="9" rx="2" fill="rgba(8,51,68,0.4)"    stroke="#22d3ee" stroke-width="1"/>
+      <text x="39"  y="564" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">Browser Extension</text>
+      <rect x="175" y="556" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)"    stroke="#34d399" stroke-width="1"/>
+      <text x="194" y="564" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">Backend Service</text>
+      <rect x="316" y="556" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)"  stroke="#a78bfa" stroke-width="1"/>
+      <text x="335" y="564" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">Storage</text>
+      <rect x="398" y="556" width="14" height="9" rx="2" fill="rgba(30,41,59,0.5)"   stroke="#94a3b8" stroke-width="1"/>
+      <text x="417" y="564" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">External API</text>
+      <rect x="499" y="556" width="14" height="9" rx="2" fill="rgba(120,53,15,0.3)"  stroke="#fbbf24" stroke-width="1"/>
+      <text x="518" y="564" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">AI Service</text>
+      <line x1="592" y1="561" x2="612" y2="561" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="617" y="565" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">HTTP Request</text>
+      <line x1="710" y1="561" x2="730" y2="561" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,2"/>
+      <text x="735" y="565" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">SSE Stream</text>
+      <line x1="808" y1="561" x2="828" y2="561" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="833" y="565" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">Read / Write</text>
+
+      <!-- ── LEGEND — numbered connections ──────────────────────────────── -->
+      <text x="20" y="582" fill="white" font-size="10" font-weight="600" font-family="JetBrains Mono">Connections</text>
+
+      <!-- Left column -->
+      <circle cx="28" cy="596" r="5" fill="#0f172a" stroke="#22d3ee" stroke-width="1"/>
+      <text x="28" y="600" fill="#22d3ee" font-size="7" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">1</text>
+      <text x="38" y="600" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">content.js → API Routes: POST /analyze · /chat · /index</text>
+
+      <circle cx="28" cy="613" r="5" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+      <text x="28" y="617" fill="#34d399" font-size="7" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">2</text>
+      <text x="38" y="617" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">API Routes → content.js: SSE text_delta stream</text>
+
+      <circle cx="28" cy="630" r="5" fill="#0f172a" stroke="#22d3ee" stroke-width="1"/>
+      <text x="28" y="634" fill="#22d3ee" font-size="7" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">3</text>
+      <text x="38" y="634" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">background.js → API Routes: GET /health (30s health ping)</text>
+
+      <!-- Right column -->
+      <circle cx="560" cy="596" r="5" fill="#0f172a" stroke="#94a3b8" stroke-width="1"/>
+      <text x="560" y="600" fill="#94a3b8" font-size="7" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">4</text>
+      <text x="570" y="600" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">GitHub Client → GitHub REST API v3: HTTPS · PAT Bearer auth</text>
+
+      <circle cx="560" cy="613" r="5" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+      <text x="560" y="617" fill="#fbbf24" font-size="7" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">5</text>
+      <text x="570" y="617" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">Claude Client → Anthropic Claude API: HTTPS POST /v1/messages (SSE)</text>
+
+      <circle cx="560" cy="630" r="5" fill="#0f172a" stroke="#a78bfa" stroke-width="1"/>
+      <text x="560" y="634" fill="#a78bfa" font-size="7" font-weight="700" font-family="JetBrains Mono" text-anchor="middle">6</text>
+      <text x="570" y="634" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">BM25 Indexer → BM25 Index Store: JSON chunk writes to disk</text>
+    </svg>
+  </div>
+
+  <!-- Info Cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot cyan"></div>
+        <h3>Chrome Extension (MV3)</h3>
+      </div>
+      <ul>
+        <li>• content.js — button injection, panel UI, SSE client</li>
+        <li>• background.js — backend health ping every 30s</li>
+        <li>• popup.html/js — API keys, re-index trigger</li>
+        <li>• Only activates for PR authors on github.com/*/pull/*</li>
+        <li>• MutationObserver (300ms debounce) for GitHub SPA</li>
+        <li>• abortCurrentStream() on panel close / navigation</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>FastAPI Backend :8765</h3>
+      </div>
+      <ul>
+        <li>• Binds to 127.0.0.1 only — no network exposure</li>
+        <li>• CORS restricted to github.com + localhost</li>
+        <li>• BM25 (rank_bm25) — no embedding model required</li>
+        <li>• Context: diff hunk → file → RAG → imports → summary</li>
+        <li>• Prompt: mentor style, 2-4 approaches, no paste-ready code</li>
+        <li>• Rotating logs (10 MB, 2 backups) via RotatingFileHandler</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>External Integrations</h3>
+      </div>
+      <ul>
+        <li>• GitHub REST API v3 — PAT Bearer auth (repo scope)</li>
+        <li>• Anthropic Claude API — claude-sonnet-4-5, SSE stream</li>
+        <li>• Credentials passed per-request — never stored server-side</li>
+        <li>• Errors surfaced as SSE error events with machine codes</li>
+        <li>• Outdated comment detection via commit_id vs head SHA</li>
+        <li>• 5-min indexing timeout → graceful fallback (no-RAG)</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">PR Review AI Assistant · Chrome MV3 + FastAPI · Python 3.8+ · claude-sonnet-4-5</p>
+</div>
+</body>
+</html>
